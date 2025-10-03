@@ -1,6 +1,6 @@
 [package]
 name = "egui-async"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A simple library for running async tasks in egui and binding their results to your UI."
 authors = ["Cody Wyatt Neiman (xangelix) <neiman@cody.to>"]
