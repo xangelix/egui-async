@@ -1,0 +1,39 @@
+[package]
+name = "egui-async"
+version = "0.1.0"
+edition = "2024"
+description = "A simple library for running async tasks in egui and binding their results to your UI."
+authors = ["Cody Wyatt Neiman (xangelix) <neiman@cody.to>"]
+categories = ["gui", "asynchronous", "wasm", "concurrency", "web-programming"]
+keywords = ["egui", "async", "future", "gui", "ui", "wasm"]
+repository = "https://github.com/xangelix/egui-async"
+documentation = "https://docs.rs/egui-async"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+
+[features]
+default = ["egui"]
+egui = ["dep:egui"]
+
+[dependencies]
+atomic_float = "1"
+tracing = "0.1"
+
+egui = { version = "0.32", optional = true }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+tokio = { version = "1", default-features = false, features = [
+    "sync",
+    "rt-multi-thread",
+] }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+tokio = { version = "1", default-features = false, features = ["sync"] }
+wasm-bindgen-futures = "0.4"
+
+[dev-dependencies]
+eframe = "0.32.3"
+reqwest = { version = "0.12.23", features = ["json"] }
+rand = "0.9.2"
+serde_json = "1.0.145"
+walkers = "0.45.0"
