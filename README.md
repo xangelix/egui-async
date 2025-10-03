@@ -1,9 +1,8 @@
 # egui-async
 
-[![Crates.io](https://img.shields.io/crates/v/egui-async.svg)](https://crates.io/crates/egui-async)
+[![Crates.io](https://img.shields.io/crates/v/egui-async)](https://crates.io/crates/egui-async)
 [![Docs.rs](https://docs.rs/egui-async/badge.svg)](https://docs.rs/egui-async)
-[![License: MIT](https://img.shields.io/crates/l/egui-async.svg)](https://opensource.org/licenses/MIT)
-[![License: Apache-2.0](https://img.shields.io/crates/l/egui-async.svg)](https://opensource.org/licenses/Apache-2.0)
+[![License](https://img.shields.io/crates/l/egui-async)](https://snyk.io/articles/apache-license/#apache-license-vs-mit)
 
 A simple, batteries-included, library for running async tasks across frames in [`egui`](https://crates.io/crates/egui) and binding their results to your UI.
 
