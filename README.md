@@ -8,6 +8,32 @@ A simple, batteries-included, library for running async tasks across frames in [
 
 Supports both native and wasm32 targets.
 
+```rs
+if let Some(res) = self.data_bind.read_or_request(|| async {
+    reqwest::get("https://icanhazip.com/")
+        .await
+        .map_err(|e| e.to_string())?
+        .text()
+        .await
+        .map_err(|e| e.to_string())
+}) {
+    match res {
+        Ok(ip) => {
+            ui.label(format!("Your public IP is: {ip}"));
+        }
+        Err(err) => {
+            ui.colored_label(
+                egui::Color32::RED,
+                format!("Could not fetch IP.\nError: {err}"),
+            );
+        }
+    }
+} else {
+    ui.label("Getting public IP...");
+    ui.spinner();
+}
+```
+
 ## What is this?
 
 Immediate-mode GUI libraries like `egui` are fantastic, but they pose a challenge: how do you run a long-running or async task (like a network request), between frames, without blocking the UI thread?
