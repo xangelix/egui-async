@@ -1,5 +1,5 @@
 use eframe::egui;
-use egui_async::{Bind, ContextExt as _, StateWithData};
+use egui_async::{Bind, EguiAsyncPlugin, StateWithData};
 use walkers::{HttpTiles, Map, MapMemory, lat_lon, sources::OpenStreetMap};
 
 // Boilerplate to run an eframe app
@@ -74,9 +74,9 @@ async fn fetch_ip_location(ip: String) -> Result<(f64, f64), String> {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // This must be called every frame to update the internal time
-        // and drive the polling mechanism.
-        ctx.loop_handle(); // <-- REQUIRED
+        // This registers the plugin that drives the async event loop.
+        // It's idempotent and cheap to call on every frame.
+        ctx.plugin_or_default::<EguiAsyncPlugin>(); // <-- REQUIRED
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("egui-async Advanced Demo");

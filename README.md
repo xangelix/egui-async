@@ -28,8 +28,8 @@ It works with both `tokio` on native and `wasm-bindgen-futures` on the web, righ
 
 `egui-async` works by bridging `egui`'s immediate-mode rendering loop with a background async runtime.
 
-1.  `ctx.loop_handle()`: You must call this once per frame. It updates a global frame timer that `Bind` uses to track its state.
-2.  `Bind::request()`: When you start an operation, it spawns a `Future` onto a runtime (`tokio` on native, `wasm-bindgen-futures` on web).
+1.  **Plugin Registration**: You must register the `EguiAsyncPlugin` with `egui`. The easiest way is to call `ctx.plugin_or_default::<egui_async::EguiAsyncPlugin>();` once per frame. This plugin updates a global frame timer used by all `Bind` instances.
+2.  **`Bind::request()`**: When you start an operation, it spawns a `Future` onto a runtime (`tokio` on native, `wasm-bindgen-futures` on web).
 3.  **Communication**: The spawned task is given a `tokio::sync::oneshot::Sender`. When the future completes, it sends the `Result` back to the `Bind` instance, which holds the `Receiver`.
 4.  **Polling**: On each frame, `Bind` checks its receiver to see if the result has arrived. If it has, `Bind` transitions from the `Pending` state to the `Finished` state.
 5.  **UI Update**: Your UI code can then check the `Bind`'s state and display the data, an error, or a loading indicator.
@@ -39,6 +39,7 @@ It works with both `tokio` on native and `wasm-bindgen-futures` on the web, righ
 Here is a minimal example using `eframe` that shows how to fetch data from an async function.
 
 First, add `egui-async` to your dependencies:
+
 ```sh
 cargo add egui-async
 ```
@@ -47,7 +48,7 @@ Then, use the `Bind` struct in your application:
 
 ```rust
 use eframe::egui;
-use egui_async::{Bind, ContextExt};
+use egui_async::{Bind, EguiAsyncPlugin};
 
 struct MyApp {
     /// The Bind struct holds the state of our async operation.
@@ -68,9 +69,9 @@ impl Default for MyApp {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // This must be called every frame to update the internal time
-        // and drive the polling mechanism.
-        ctx.loop_handle(); // <-- REQUIRED
+        // This registers the plugin that drives the async event loop.
+        // It's idempotent and cheap to call on every frame.
+        ctx.plugin_or_default::<EguiAsyncPlugin>(); // <-- REQUIRED
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Async Data Demo");
@@ -111,7 +112,7 @@ fn main() {
     eframe::run_native(
         "egui-async example",
         native_options,
-        Box::new(|_cc| Box::new(MyApp::default())),
+        Box::new(|_cc| Ok(Box::new(MyApp::default()))),
     )
     .unwrap();
 }
@@ -126,11 +127,13 @@ fn main() {
 This is the most powerful and explicit pattern. Use it when you want to render a different UI for every possible state: `Pending`, `Finished` with data, `Failed` with an error, or `Idle`. It's perfect for detailed components that need to show loading spinners, error messages, and the final data.
 
 ```rust
+use egui_async::StateWithData;
+
 match self.data_bind.state_or_request(my_async_fn) {
     StateWithData::Idle => { /* This is usually skipped */ }
     StateWithData::Pending => { ui.spinner(); }
     StateWithData::Finished(data) => { ui.label(format!("Success: {data}")); }
-    StateWithData::Failed(err) => { ui.colored_label(egui::Color32::RED, err); }
+    StateWithData::Failed(err) => { ui.colored_label(egui::Color32::RED, err.to_string()); }
 }
 ```
 
@@ -144,7 +147,7 @@ Use this pattern when you primarily care about the successful result and want a 
 if let Some(result) = self.data_bind.read_or_request(my_async_fn) {
     match result {
         Ok(data) => { ui.label(format!("Your IP is: {data}")); }
-        Err(err) => { ui.colored_label(egui::Color32::RED, err); }
+        Err(err) => { ui.colored_label(egui::Color32::RED, err.to_string()); }
     }
 } else {
     ui.spinner();

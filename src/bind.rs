@@ -9,9 +9,9 @@ use atomic_float::AtomicF64;
 use tokio::sync::oneshot;
 use tracing::warn;
 
-/// The `egui` time of the current frame, updated by `ContextExt::loop_handle`.
+/// The `egui` time of the current frame, updated by `EguiAsyncPlugin`.
 pub static CURR_FRAME: AtomicF64 = AtomicF64::new(0.0);
-/// The `egui` time of the previous frame, updated by `ContextExt::loop_handle`.
+/// The `egui` time of the previous frame, updated by `EguiAsyncPlugin`.
 pub static LAST_FRAME: AtomicF64 = AtomicF64::new(0.0);
 
 /// A lazily initialized Tokio runtime for executing async tasks on non-WASM targets.
@@ -23,7 +23,7 @@ pub static ASYNC_RUNTIME: std::sync::LazyLock<tokio::runtime::Runtime> =
 
 /// A global holder for the `egui::Context`, used to request repaints from background tasks.
 ///
-/// This is initialized once by `egui::ContextExt::loop_handle`.
+/// This is initialized once by `EguiAsyncPlugin`.
 #[cfg(feature = "egui")]
 pub static CTX: std::sync::OnceLock<egui::Context> = std::sync::OnceLock::new();
 

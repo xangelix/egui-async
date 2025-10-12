@@ -10,7 +10,7 @@ pub use bind::{Bind, State, StateWithData};
 pub mod egui;
 
 #[cfg(feature = "egui")]
-pub use egui::ContextExt;
+pub use egui::{EguiAsyncPlugin, UiExt};
 
 /// A macro to run initialization code only once, even in the presence of multiple threads.
 /// Returns `true` if the code was executed in this call, `false` otherwise.
