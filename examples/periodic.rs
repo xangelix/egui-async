@@ -62,7 +62,7 @@ impl eframe::App for MyApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("egui-async Periodic Refresh Demo");
-            ui.label("This example fetches a random user every 20 seconds.");
+            ui.label("This example fetches a random user every 10 seconds.");
 
             ui.separator();
 
