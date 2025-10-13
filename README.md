@@ -8,7 +8,7 @@ A simple, batteries-included, library for running async tasks across frames in [
 
 Supports both native and wasm32 targets.
 
-```rs
+```rust
 if let Some(res) = self.data_bind.read_or_request(|| async {
     reqwest::get("https://icanhazip.com/")
         .await
