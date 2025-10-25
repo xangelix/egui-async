@@ -240,6 +240,17 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         self.times_executed += 1;
     }
 
+    /// Convenience: periodic request using `std::time::Duration`.
+    #[must_use]
+    pub fn request_every<Fut>(&mut self, f: impl FnOnce() -> Fut, every: std::time::Duration) -> f64
+    where
+        Fut: Future<Output = Result<T, E>> + MaybeSend + 'static,
+        T: MaybeSend,
+        E: MaybeSend,
+    {
+        self.request_every_sec(f, every.as_secs_f64())
+    }
+
     /// Requests an operation to run periodically.
     ///
     /// If the `Bind` is not `Pending` and more than `secs` seconds have passed since the
