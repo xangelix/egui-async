@@ -224,6 +224,7 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         #[cfg(not(target_family = "wasm"))]
         {
             let (tx, rx) = self.prepare_channel();
+            tracing::trace!("spawning async request #{:?}", self.times_executed + 1);
             ASYNC_RUNTIME.spawn(Self::req_inner(f, tx));
             self.recv = Some(rx);
         }
@@ -231,6 +232,7 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         #[cfg(target_family = "wasm")]
         {
             let (tx, rx) = self.prepare_channel();
+            tracing::trace!("spawning async request #{:?}", self.times_executed + 1);
             wasm_bindgen_futures::spawn_local(Self::req_inner(f, tx));
             self.recv = Some(rx);
         }
