@@ -352,6 +352,20 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         matches!(self.state, State::Finished)
     }
 
+    /// Returns `true` if finished with `Ok`.
+    #[must_use]
+    pub fn is_ok(&mut self) -> bool {
+        self.poll();
+        matches!(self.data, Some(Ok(_)))
+    }
+
+    /// Returns `true` if finished with `Err`.
+    #[must_use]
+    pub fn is_err(&mut self) -> bool {
+        self.poll();
+        matches!(self.data, Some(Err(_)))
+    }
+
     /// Returns `true` if the operation finished during the current `egui` frame.
     /// This method calls `poll()` internally.
     #[allow(clippy::float_cmp)]
