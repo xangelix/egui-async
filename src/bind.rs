@@ -467,6 +467,7 @@ impl<T: 'static, E: 'static> Bind<T, E> {
     ///
     /// This is often the most ergonomic way to display UI based on the `Bind`'s state.
     /// This method calls `poll()` internally.
+    /// Invariant: `State::Finished` implies `data.is_some()`.
     ///
     /// # Example
     /// ```ignore
