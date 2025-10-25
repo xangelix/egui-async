@@ -163,6 +163,17 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         }
     }
 
+    /// Returns whether finished data is retained across undrawn frames.
+    #[must_use]
+    pub const fn retain(&self) -> bool {
+        self.retain
+    }
+
+    /// Sets retain policy for finished data.
+    pub const fn set_retain(&mut self, retain: bool) {
+        self.retain = retain;
+    }
+
     /// Internal helper to prepare the state and communication channel for a new async request.
     #[allow(clippy::type_complexity)]
     fn prepare_channel(
