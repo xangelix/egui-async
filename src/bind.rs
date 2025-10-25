@@ -265,7 +265,7 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         T: MaybeSend,
         E: MaybeSend,
     {
-        let since_completed = self.since_completed();
+        let since_completed = self.since_completed_raw();
 
         if self.get_state() != State::Pending && since_completed > secs {
             self.request(f());
@@ -424,6 +424,9 @@ impl<T: 'static, E: 'static> Bind<T, E> {
     /// This method calls `poll()` internally.
     pub fn since_completed(&mut self) -> f64 {
         self.poll();
+        self.since_completed_raw()
+    }
+    fn since_completed_raw(&self) -> f64 {
         CURR_FRAME.load(std::sync::atomic::Ordering::Relaxed) - self.last_complete_time
     }
 
