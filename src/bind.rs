@@ -51,6 +51,17 @@ pub enum StateWithData<'a, T, E> {
     Failed(&'a E),
 }
 
+impl<T: Debug, E: Debug> Debug for StateWithData<'_, T, E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StateWithData::Idle => f.write_str("Idle"),
+            StateWithData::Pending => f.write_str("Pending"),
+            StateWithData::Finished(t) => f.debug_tuple("Finished").field(t).finish(),
+            StateWithData::Failed(e) => f.debug_tuple("Failed").field(e).finish(),
+        }
+    }
+}
+
 /// A state manager for a single asynchronous operation, designed for use with `egui`.
 ///
 /// `Bind` tracks the lifecycle of a `Future` and stores its `Result<T, E>`. It acts as a
