@@ -15,6 +15,11 @@ license = "MIT OR Apache-2.0"
 default = ["egui"]
 egui = ["dep:egui"]
 
+[lints.clippy]
+todo = "deny"
+panic = "deny"
+unwrap_used = "deny"
+
 [dependencies]
 atomic_float = "1"
 tracing = "0.1"
