@@ -550,6 +550,7 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         self.poll();
         self.state = State::Idle;
         self.data = None;
+        self.recv = None;
     }
 
     /// Returns a reference to the data, or starts a new request if idle.
@@ -626,6 +627,7 @@ impl<T: 'static, E: 'static> Bind<T, E> {
             // Manually clear state to avoid a recursive call to poll() from clear().
             self.state = State::Idle;
             self.data = None;
+            self.recv = None;
         }
 
         if matches!(self.state, State::Pending) {
