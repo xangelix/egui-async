@@ -4,14 +4,13 @@ use eframe::egui;
 use egui_async::{Bind, EguiAsyncPlugin};
 
 // Boilerplate to run an eframe app
-fn main() {
+fn main() -> eframe::Result {
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
         "egui-async example",
         native_options,
         Box::new(|_cc| Ok(Box::new(MyApp::default()))),
     )
-    .unwrap();
 }
 
 struct MyApp {
