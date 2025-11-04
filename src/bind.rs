@@ -651,9 +651,12 @@ impl<T: 'static, E: 'static> Bind<T, E> {
                     // Future is still running, do nothing.
                 }
                 Err(oneshot::error::TryRecvError::Closed) => {
-                    // This is a critical error: the task's sender was dropped without sending a value.
-                    // This should only happen if the runtime shuts down unexpectedly.
-                    panic!("Async task's sender was dropped without sending a result.");
+                    // Treat as cancellation: clear the pending state without crashing the app.
+                    tracing::warn!(
+                        "Async task cancelled: sender dropped without sending a result."
+                    );
+                    self.state = State::Idle;
+                    self.recv = None;
                 }
             }
         }
