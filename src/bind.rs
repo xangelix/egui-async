@@ -338,7 +338,11 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         );
 
         self.state = State::Finished;
-        self.last_complete_time = CURR_FRAME.load(std::sync::atomic::Ordering::Relaxed);
+
+        let now = CURR_FRAME.load(std::sync::atomic::Ordering::Relaxed);
+        self.last_start_time = now;
+        self.last_complete_time = now;
+
         self.data = Some(data);
     }
 
