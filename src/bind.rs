@@ -346,6 +346,35 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         self.data = Some(data);
     }
 
+    /// Returns `Some(&T)` when finished successfully.
+    #[must_use]
+    pub fn ok_ref(&mut self) -> Option<&T> {
+        self.poll();
+        self.data.as_ref()?.as_ref().ok()
+    }
+
+    /// Returns `Some(&E)` when finished with error.
+    #[must_use]
+    pub fn err_ref(&mut self) -> Option<&E> {
+        self.poll();
+        self.data.as_ref()?.as_ref().err()
+    }
+
+    /// Takes and returns `T` only if finished successfully.
+    pub fn take_ok(&mut self) -> Option<T> {
+        self.poll();
+        match self.data.take()? {
+            Ok(t) => {
+                self.state = State::Idle;
+                Some(t)
+            }
+            Err(e) => {
+                self.data = Some(Err(e));
+                None
+            }
+        }
+    }
+
     /// Checks if the current state is `Idle`.
     /// This method calls `poll()` internally.
     pub fn is_idle(&mut self) -> bool {
