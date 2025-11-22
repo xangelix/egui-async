@@ -133,14 +133,13 @@ impl eframe::App for MyApp {
 }
 
 // Boilerplate
-fn main() {
+fn main() -> eframe::Result {
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
         "egui-async example",
         native_options,
         Box::new(|_cc| Ok(Box::new(MyApp::default()))),
     )
-    .unwrap();
 }
 ```
 
