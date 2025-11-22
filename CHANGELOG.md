@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.2.5
+
+- Update changelog
+
+## v0.2.4
+
+- Bump all dev dependencies
+- Add many more tests for complete coverage
+- Cleanup boilerplate in README.md example
+
 ## v0.2.3
 
 ### Added
