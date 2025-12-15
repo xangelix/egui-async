@@ -276,9 +276,10 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         T: MaybeSend,
         E: MaybeSend,
     {
+        let state = self.get_state();
         let since_completed = self.since_completed_raw();
 
-        if self.get_state() != State::Pending && since_completed > secs {
+        if state != State::Pending && since_completed > secs {
             self.request(f());
         }
 
