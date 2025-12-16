@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.6
+
+- Bug fix for `request_every_sec` where `since_completed` was read before it as actually updated-- thanks @sectore !
+
 ## v0.2.5
 
 - Update changelog
