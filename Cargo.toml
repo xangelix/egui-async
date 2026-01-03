@@ -23,6 +23,7 @@ unwrap_used = "deny"
 [dependencies]
 atomic_float = "1"
 tracing = "0.1"
+bitflags = "2"
 
 egui = { version = "0.33", optional = true }
 

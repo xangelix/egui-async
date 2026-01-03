@@ -62,6 +62,22 @@ impl<T: Debug, E: Debug> Debug for StateWithData<'_, T, E> {
     }
 }
 
+bitflags::bitflags! {
+    /// Configuration flags for `Bind` behavior.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub struct ConfigFlags: u8 {
+        /// If `true`, the `data` from a `Finished` state is preserved even if the `Bind` instance
+        /// is not polled for one or more frames. If `false`, the data is cleared.
+        const RETAIN = 0b0000_0001;
+    }
+}
+
+impl Default for ConfigFlags {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 /// A state manager for a single asynchronous operation, designed for use with `egui`.
 ///
 /// `Bind` tracks the lifecycle of a `Future` and stores its `Result<T, E>`. It acts as a
@@ -87,9 +103,8 @@ pub struct Bind<T, E> {
     /// The `egui` time when the most recent operation was completed.
     last_complete_time: f64,
 
-    /// If `true`, the `data` from a `Finished` state is preserved even if the `Bind` instance
-    /// is not polled for one or more frames. If `false`, the data is cleared.
-    retain: bool,
+    /// Configuration option flags
+    pub config: ConfigFlags,
 
     /// A counter for how many times an async operation has been started.
     times_executed: usize,
@@ -100,7 +115,7 @@ impl<T, E> Debug for Bind<T, E> {
         let mut out = f.debug_struct("Bind");
         let mut out = out
             .field("state", &self.state)
-            .field("retain", &self.retain)
+            .field("config", &self.config)
             .field("drawn_time_last", &self.drawn_time_last)
             .field("drawn_time_prev", &self.drawn_time_prev)
             .field("last_start_time", &self.last_start_time)
@@ -164,12 +179,20 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         Self {
             drawn_time_last: 0.0,
             drawn_time_prev: 0.0,
+
             data: None,
             recv: None,
+
             state: State::Idle,
             last_start_time: 0.0,
             last_complete_time: f64::MIN, // Set to a very low value to ensure `since_completed` is large initially.
-            retain,
+
+            config: if retain {
+                ConfigFlags::RETAIN
+            } else {
+                ConfigFlags::empty()
+            },
+
             times_executed: 0,
         }
     }
@@ -177,12 +200,16 @@ impl<T: 'static, E: 'static> Bind<T, E> {
     /// Returns whether finished data is retained across undrawn frames.
     #[must_use]
     pub const fn retain(&self) -> bool {
-        self.retain
+        self.config.contains(ConfigFlags::RETAIN)
     }
 
     /// Sets retain policy for finished data.
-    pub const fn set_retain(&mut self, retain: bool) {
-        self.retain = retain;
+    pub fn set_retain(&mut self, retain: bool) {
+        if retain {
+            self.config.insert(ConfigFlags::RETAIN);
+        } else {
+            self.config.remove(ConfigFlags::RETAIN);
+        }
     }
 
     /// Internal helper to prepare the state and communication channel for a new async request.
@@ -657,7 +684,7 @@ impl<T: 'static, E: 'static> Bind<T, E> {
 
         // If `retain` is false and the UI element associated with this `Bind` was not rendered
         // in the previous frame, we clear its data to free resources and ensure a fresh load.
-        if !self.retain && !self.was_drawn_last_frame() {
+        if !self.retain() && !self.was_drawn_last_frame() {
             // Manually clear state to avoid a recursive call to poll() from clear().
             self.state = State::Idle;
             self.data = None;
