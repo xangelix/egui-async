@@ -69,12 +69,54 @@ bitflags::bitflags! {
         /// If `true`, the `data` from a `Finished` state is preserved even if the `Bind` instance
         /// is not polled for one or more frames. If `false`, the data is cleared.
         const RETAIN = 0b0000_0001;
+        /// Opt-in: Physically abort the background task on Native when
+        /// the Bind is cleared or a new request is made.
+        ///
+        /// **Warning:** This terminates the task immediately. If the future has
+        /// critical side effects (e.g., I/O, cleanup), they may not complete.
+        ///
+        /// Due to browser limitations, **this flag has no effect on WASM targets**.
+        const ABORT  = 0b0000_0010;
     }
 }
 
 impl Default for ConfigFlags {
     fn default() -> Self {
         Self::empty()
+    }
+}
+
+/// Internal container to keep the receiver and its control handle synchronized.
+/// This should exist only when the state is `Pending`.
+struct InFlight<T, E> {
+    /// The receiving end of a one-shot channel used to get the result from the background task.
+    recv: oneshot::Receiver<Result<T, E>>,
+
+    /// The abort handle for the spawned task (native only).
+    #[cfg(not(target_family = "wasm"))]
+    handle: tokio::task::AbortHandle,
+}
+
+impl<T, E> Debug for InFlight<T, E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut out = f.debug_struct("InFlight");
+        out.field("recv", &"oneshot::Receiver<...>");
+
+        #[cfg(not(target_family = "wasm"))]
+        out.field("handle", &self.handle);
+
+        out.finish()
+    }
+}
+
+impl<T, E> InFlight<T, E> {
+    fn abort(&self) {
+        #[cfg(not(target_family = "wasm"))]
+        self.handle.abort();
+    }
+
+    fn poll_result(&mut self) -> Result<Result<T, E>, oneshot::error::TryRecvError> {
+        self.recv.try_recv()
     }
 }
 
@@ -92,9 +134,7 @@ pub struct Bind<T, E> {
 
     /// The result of the completed async operation. `None` if the task is not `Finished`.
     pub(crate) data: Option<Result<T, E>>,
-    /// The receiving end of a one-shot channel used to get the result from the background task.
-    /// This is `Some` only when the state is `Pending`.
-    recv: Option<oneshot::Receiver<Result<T, E>>>,
+    in_flight: Option<InFlight<T, E>>,
 
     /// The current execution state of the async operation.
     pub(crate) state: State,
@@ -129,10 +169,10 @@ impl<T, E> Debug for Bind<T, E> {
             out = out.field("data", &"None");
         }
 
-        if self.recv.is_some() {
-            out = out.field("recv", &"Some(...)");
+        if let Some(in_flight) = &self.in_flight {
+            out = out.field("in_flight", in_flight);
         } else {
-            out = out.field("recv", &"None");
+            out = out.field("in_flight", &"None");
         }
 
         out.finish()
@@ -181,7 +221,7 @@ impl<T: 'static, E: 'static> Bind<T, E> {
             drawn_time_prev: 0.0,
 
             data: None,
-            recv: None,
+            in_flight: None,
 
             state: State::Idle,
             last_start_time: 0.0,
@@ -212,20 +252,23 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         }
     }
 
-    /// Internal helper to prepare the state and communication channel for a new async request.
-    #[allow(clippy::type_complexity)]
-    fn prepare_channel(
-        &mut self,
-    ) -> (
-        oneshot::Sender<Result<T, E>>,
-        oneshot::Receiver<Result<T, E>>,
-    ) {
-        self.poll(); // Ensure state is up-to-date before starting.
+    /// Returns whether background tasks are physically aborted when cleared or replaced.
+    ///
+    /// This flag only affects non-WASM targets.
+    #[must_use]
+    pub const fn abort_on_clear(&self) -> bool {
+        self.config.contains(ConfigFlags::ABORT)
+    }
 
-        self.last_start_time = CURR_FRAME.load(std::sync::atomic::Ordering::Relaxed);
-        self.state = State::Pending;
-
-        oneshot::channel()
+    /// Sets whether background tasks are physically aborted when cleared or replaced.
+    ///
+    /// **Note:** This has no effect on WASM targets due to browser execution models.
+    pub fn set_abort(&mut self, abort: bool) {
+        if abort {
+            self.config.insert(ConfigFlags::ABORT);
+        } else {
+            self.config.remove(ConfigFlags::ABORT);
+        }
     }
 
     /// Internal async function that awaits the user's future and sends the result back.
@@ -259,22 +302,32 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         T: MaybeSend,
         E: MaybeSend,
     {
+        // Drive state machine to catch results from tasks finishing this frame
+        self.poll();
+
+        // Handle existing task based on config; sets state to Idle if still Pending
+        self.abort();
+
+        self.last_start_time = CURR_FRAME.load(std::sync::atomic::Ordering::Relaxed);
+        let (tx, rx) = oneshot::channel();
+
+        // Spawn the async task
+        tracing::trace!("spawning async request #{}", self.times_executed + 1);
+
         #[cfg(not(target_family = "wasm"))]
-        {
-            let (tx, rx) = self.prepare_channel();
-            tracing::trace!("spawning async request #{:?}", self.times_executed + 1);
-            ASYNC_RUNTIME.spawn(Self::req_inner(f, tx));
-            self.recv = Some(rx);
-        }
+        let in_flight = InFlight {
+            recv: rx,
+            handle: ASYNC_RUNTIME.spawn(Self::req_inner(f, tx)).abort_handle(),
+        };
 
         #[cfg(target_family = "wasm")]
-        {
-            let (tx, rx) = self.prepare_channel();
-            tracing::trace!("spawning async request #{:?}", self.times_executed + 1);
+        let in_flight = {
             wasm_bindgen_futures::spawn_local(Self::req_inner(f, tx));
-            self.recv = Some(rx);
-        }
+            InFlight { recv: rx }
+        };
 
+        self.in_flight = Some(in_flight);
+        self.state = State::Pending;
         self.times_executed += 1;
     }
 
@@ -311,6 +364,25 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         }
 
         secs - since_completed
+    }
+
+    /// Explicitly cancels the in-flight task and resets the state to `Idle`.
+    ///
+    /// If the [`ConfigFlags::ABORT`] flag is set, the background task is physically
+    /// terminated (Native only). Otherwise, the result is simply ignored.
+    pub fn abort(&mut self) {
+        // Logical: Take the in-flight handle. This detaches the Bind from the task.
+        if let Some(task) = self.in_flight.take() {
+            // Physical: Only signal the runtime to kill the task if configured.
+            if self.config.contains(ConfigFlags::ABORT) {
+                task.abort();
+            }
+        }
+
+        // Ensure state is synchronized with the removal of the in-flight task.
+        if matches!(self.state, State::Pending) {
+            self.state = State::Idle;
+        }
     }
 
     /// Clears any existing data and immediately starts a new async operation.
@@ -609,9 +681,9 @@ impl<T: 'static, E: 'static> Bind<T, E> {
     /// This method calls `poll()` internally.
     pub fn clear(&mut self) {
         self.poll();
+        self.abort();
         self.state = State::Idle;
         self.data = None;
-        self.recv = None;
     }
 
     /// Returns a reference to the data, or starts a new request if idle.
@@ -686,23 +758,22 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         // in the previous frame, we clear its data to free resources and ensure a fresh load.
         if !self.retain() && !self.was_drawn_last_frame() {
             // Manually clear state to avoid a recursive call to poll() from clear().
+            self.abort();
             self.state = State::Idle;
             self.data = None;
-            self.recv = None;
         }
 
         if matches!(self.state, State::Pending) {
-            match self
-                .recv
+            let task = self
+                .in_flight
                 .as_mut()
-                .expect("BUG: State is Pending but receiver is missing.")
-                .try_recv()
-            {
+                .expect("BUG: Pending but no in_flight.");
+            match task.poll_result() {
                 Ok(result) => {
                     self.data = Some(result);
                     self.last_complete_time = CURR_FRAME.load(std::sync::atomic::Ordering::Relaxed);
                     self.state = State::Finished;
-                    self.recv = None; // Drop the receiver as it's no longer needed.
+                    self.in_flight = None; // Drop the in_flight receiver as it's no longer needed.
                 }
                 Err(oneshot::error::TryRecvError::Empty) => {
                     // Future is still running, do nothing.
@@ -713,7 +784,7 @@ impl<T: 'static, E: 'static> Bind<T, E> {
                         "Async task cancelled: sender dropped without sending a result."
                     );
                     self.state = State::Idle;
-                    self.recv = None;
+                    self.in_flight = None;
                 }
             }
         }

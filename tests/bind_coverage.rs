@@ -51,7 +51,7 @@ fn debug_impls_coverage() {
         assert!(dbg.contains("state: Idle"));
         // Debug for &str adds quotes, so we look for "None" with quotes
         assert!(dbg.contains("data: \"None\""));
-        assert!(dbg.contains("recv: \"None\""));
+        assert!(dbg.contains("in_flight: \"None\""));
 
         // Cover Bind Debug (Finished/Some)
         let mut b_full: Bind<i32, ()> = Bind::new(false);
@@ -65,7 +65,7 @@ fn debug_impls_coverage() {
         b_pending.request(async { Ok(1) });
         let dbg_pending = format!("{b_pending:?}");
         assert!(dbg_pending.contains("state: Pending"));
-        assert!(dbg_pending.contains("recv: \"Some(...)\""));
+        assert!(dbg_pending.contains("in_flight: InFlight"));
     });
 }
 
