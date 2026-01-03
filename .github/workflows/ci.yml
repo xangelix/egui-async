@@ -1,0 +1,26 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    container:
+      image: registry.gitlab.com/xangelix-pub/containers/arch:latest
+      options: --user root # How I wish this were GitLab
+
+    steps:
+      - uses: actions/checkout@v6
+      
+      - name: Install Rust
+        run: curl https://gitlab.com/xangelix-pub/init/-/raw/main/os/arch/rust.sh | sh
+      
+      - name: Select stable Rust toolchain
+        run: rustup default stable
+
+      - name: Cache dependencies
+        uses: swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test
