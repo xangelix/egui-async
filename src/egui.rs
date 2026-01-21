@@ -202,7 +202,7 @@ impl UiExt for egui::Ui {
         let total_width = screen_rect.width();
         let total_height = screen_rect.height();
 
-        let id = egui::Id::new("error_window");
+        let id = self.id().with("error_window");
         egui::Window::new("Error")
             .id(id)
             .collapsible(false)
@@ -230,7 +230,7 @@ impl UiExt for egui::Ui {
         let total_width = screen_rect.width();
         let total_height = screen_rect.height();
 
-        let id = egui::Id::new("notify_window");
+        let id = self.id().with("notify_window");
         egui::Window::new("Info")
             .id(id)
             .collapsible(false)
