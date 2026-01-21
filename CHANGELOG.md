@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.1
+
+- Small bug fix for overlapping egui IDs when using the `popup_error` and `popup_notify` helpers.
+
 ## v0.3.0
 
 This release introduces the ability to physically abort background tasks on native targets and improves the internal state synchronization of the `Bind` lifecycle. It also establishes the project's baseline CI/CD pipeline.
