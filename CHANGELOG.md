@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.2
+
+This release focuses on the robustness of the `Bind::fill` API and significant stability improvements for the test suite in concurrent environments.
+
+### Changed
+
+- **`Bind::fill` Robustness:** `fill()` no longer panics if the bind is not `Idle`. Instead, it now deterministically aborts any in-flight operations and overwrites existing data. This enables "force update" patterns without requiring manual state checks.
+- **Hot Loop Detection:** `fill()` now logs a warning if called multiple times in the same frame to help identify unintentional logic loops in UI updates.
+
+### Fixed
+
+- **Test Suite Stability:** Resolved multiple race conditions where global frame timer contention caused flaky test failures. Tests now correctly isolate `Bind` instances using `retain=true` and use deterministic future barriers.
+- **Lints:** Applied fixes for `clippy::duration_suboptimal_units` and other minor static analysis warnings.
+
 ## v0.3.1
 
 - Small bug fix for overlapping egui IDs when using the `popup_error` and `popup_notify` helpers.
