@@ -25,7 +25,7 @@ mod native_tests {
     ) -> Result<(), ()> {
         let _guard = DropTracker(dropped);
         started.store(true, Ordering::SeqCst);
-        sleep(Duration::from_secs(60)).await;
+        sleep(Duration::from_mins(1)).await;
         Ok(())
     }
 
