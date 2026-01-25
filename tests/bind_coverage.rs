@@ -27,6 +27,12 @@ fn set_time(curr: f64, last: f64) {
     LAST_FRAME.store(last, std::sync::atomic::Ordering::Relaxed);
 }
 
+// Helper to simulate frame advancement
+fn advance_frame(seconds: f64) {
+    let current = CURR_FRAME.load(std::sync::atomic::Ordering::Relaxed);
+    CURR_FRAME.store(current + seconds, std::sync::atomic::Ordering::Relaxed);
+}
+
 // --- Tests ---
 
 #[test]
@@ -279,4 +285,98 @@ fn poll_handle_closed_channel() {
         assert_eq!(b.get_state(), State::Idle);
         assert!(b.read().is_none());
     });
+}
+
+#[allow(clippy::float_cmp)]
+#[tokio::test]
+async fn test_fill_from_idle() {
+    let mut bind: Bind<i32, ()> = Bind::new(false);
+
+    // Action: Fill from Idle
+    bind.fill(Ok(42));
+
+    // Assertions
+    assert!(bind.is_finished());
+    assert_eq!(bind.read_as_ref(), Some(Ok(&42)));
+
+    assert_eq!(
+        bind.get_elapsed(),
+        0.0,
+        "Elapsed time for immediate fill should be 0.0"
+    );
+}
+
+#[tokio::test]
+async fn test_fill_overwrites_pending_and_aborts() {
+    let mut bind: Bind<i32, ()> = Bind::new(true);
+
+    // Setup: Start a long-running request
+    bind.request(async {
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+        Ok(999)
+    });
+
+    assert!(bind.is_pending(), "Bind should be pending initially");
+
+    // Action: Interrupt Pending with fill
+    // This would previously PANIC. Now it should safely overwrite.
+    bind.fill(Ok(100));
+
+    // Assertions
+    assert!(bind.is_finished(), "State should be Finished");
+    assert!(!bind.is_pending(), "Pending state should be cleared");
+    assert_eq!(
+        bind.read_as_ref(),
+        Some(Ok(&100)),
+        "Data should be updated to filled value"
+    );
+
+    // Verify internal cleanup
+    bind.poll();
+    assert_eq!(
+        bind.read_as_ref(),
+        Some(Ok(&100)),
+        "Old task result must not overwrite filled data"
+    );
+}
+
+#[tokio::test]
+async fn test_fill_overwrites_finished() {
+    let mut bind: Bind<i32, ()> = Bind::new(true); // Retain=true to keep old data
+
+    // Setup: Pre-fill with data
+    bind.fill(Ok(1));
+    assert_eq!(bind.read_as_ref(), Some(Ok(&1)));
+
+    // Action: Overwrite existing data
+    bind.fill(Ok(2));
+
+    // Assertions
+    assert!(bind.is_finished());
+    assert_eq!(bind.read_as_ref(), Some(Ok(&2)));
+    assert!(
+        bind.just_completed(),
+        "just_completed should be true for the current frame"
+    );
+}
+
+#[allow(clippy::float_cmp)]
+#[tokio::test]
+async fn test_fill_updates_timestamps() {
+    let mut bind: Bind<&str, ()> = Bind::new(false);
+
+    // Initial Frame
+    advance_frame(1.0);
+    let start_time = CURR_FRAME.load(std::sync::atomic::Ordering::Relaxed);
+
+    bind.fill(Ok("test"));
+
+    assert_eq!(bind.get_start_time(), start_time);
+    assert_eq!(bind.get_complete_time(), start_time);
+    assert_eq!(bind.since_started(), 0.0);
+
+    // Advance Frame
+    advance_frame(0.5);
+    assert_eq!(bind.since_started(), 0.5);
+    assert_eq!(bind.since_completed(), 0.5);
 }
