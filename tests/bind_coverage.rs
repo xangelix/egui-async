@@ -206,16 +206,10 @@ fn on_finished_callback() {
 
 #[test]
 fn state_method_unreachable_guard() {
-    // It is difficult to trigger the "Finished but None" panic in safe Rust
-    // without using `unsafe` to modify the struct or finding a logic bug.
-    // However, we can verify `state()` handles the normal variants correctly.
-    // The `None` branch in `State::Finished` is an internal invariant check.
-    // We cover the valid branches here.
-
-    let mut b: Bind<i32, i32> = Bind::new(false);
+    let mut b: Bind<i32, i32> = Bind::new(true);
     assert!(matches!(b.state(), StateWithData::Idle));
 
-    b.request(async { Ok(1) });
+    b.request(std::future::pending::<Result<i32, i32>>());
     assert!(matches!(b.state(), StateWithData::Pending));
 }
 
@@ -223,10 +217,10 @@ fn state_method_unreachable_guard() {
 fn read_mut_or_request_logic() {
     with_lock(|| {
         set_time(0.0, -1.0);
-        let mut b: Bind<i32, ()> = Bind::new(false);
+        let mut b: Bind<i32, ()> = Bind::new(true);
 
         // 1. Idle -> Request
-        let res = b.read_mut_or_request(|| async { Ok(1) });
+        let res = b.read_mut_or_request(std::future::pending::<Result<i32, ()>>);
         assert!(res.is_none());
         assert!(b.is_pending());
 
@@ -290,7 +284,7 @@ fn poll_handle_closed_channel() {
 #[allow(clippy::float_cmp)]
 #[tokio::test]
 async fn test_fill_from_idle() {
-    let mut bind: Bind<i32, ()> = Bind::new(false);
+    let mut bind: Bind<i32, ()> = Bind::new(true);
 
     // Action: Fill from Idle
     bind.fill(Ok(42));
@@ -340,6 +334,7 @@ async fn test_fill_overwrites_pending_and_aborts() {
     );
 }
 
+#[allow(clippy::float_cmp)]
 #[tokio::test]
 async fn test_fill_overwrites_finished() {
     let mut bind: Bind<i32, ()> = Bind::new(true); // Retain=true to keep old data
@@ -354,9 +349,10 @@ async fn test_fill_overwrites_finished() {
     // Assertions
     assert!(bind.is_finished());
     assert_eq!(bind.read_as_ref(), Some(Ok(&2)));
-    assert!(
-        bind.just_completed(),
-        "just_completed should be true for the current frame"
+    assert_eq!(
+        bind.get_start_time(),
+        bind.get_complete_time(),
+        "Fill should update start and complete times to the same instant"
     );
 }
 

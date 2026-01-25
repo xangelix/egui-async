@@ -113,7 +113,7 @@ fn request_err_flow() {
 fn just_started_and_just_completed_flags() {
     with_lock(|| {
         set_frame_times(5.0, 4.0);
-        let mut b: Bind<&'static str, &'static str> = Bind::new(false);
+        let mut b: Bind<&'static str, &'static str> = Bind::new(true);
 
         // Start the request on frame 5
         b.request(async { Ok::<_, _>("done") });
