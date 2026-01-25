@@ -427,15 +427,17 @@ impl<T: 'static, E: 'static> Bind<T, E> {
     ///
     /// This can be used to inject data into the `Bind` without running an async operation.
     ///
-    /// # Panics
-    /// Panics if the current state is not `Idle`.
+    /// If an operation is currently `Pending`, it will be aborted. If data is already
+    /// present, it will be overwritten.
     pub fn fill(&mut self, data: Result<T, E>) {
-        self.poll();
+        if self.just_completed() || self.just_started() {
+            tracing::warn!(
+                "Bind::fill called multiple times in the same frame. This may indicate a logic error in your update loop."
+            );
+        }
 
-        assert!(
-            matches!(self.state, State::Idle),
-            "Cannot fill a Bind that is not Idle."
-        );
+        // Ensure clean state: abort pending tasks and reset to Idle.
+        self.clear();
 
         self.state = State::Finished;
 
