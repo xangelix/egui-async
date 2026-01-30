@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.4
+
+### Fixed
+
+- **README Badges:** Restored the status badges (Crates.io, Docs.rs, License, WASM support) to the top of `README.md` which were accidentally removed during the v0.3.3 documentation overhaul.
+
 ## v0.3.3
 
 This release focuses on documentation improvements to make the library easier to learn and use, illustrating specific UI patterns for common async tasks.
