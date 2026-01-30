@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.3
+
+This release focuses on documentation improvements to make the library easier to learn and use, illustrating specific UI patterns for common async tasks.
+
+### Documentation
+
+- **README Overhaul:** Completely rewrote the `README.md` to align with a cleaner, high-performance style.
+    - Introduced a **"Usage Patterns"** section covering Lazy Loading, Explicit State Machines, Periodic Refresh, and Widgets.
+    - Added an **"Under the Hood"** section explaining the plugin architecture, channel polling, and task spawning differences between Native and WASM.
+    - Added **"Common Pitfalls"** and **"Compatibility"** sections.
+    - Added a diagram placeholder for the event loop architecture.
+
+### Added
+
+- **Login Example:** Added `examples/login.rs`. This is a complete, runnable example demonstrating the "Explicit State Control" pattern (Pattern 2), featuring a mock authentication flow, `StateWithData` matching, and `egui::Grid` layout.
+
 ## v0.3.2
 
 This release focuses on the robustness of the `Bind::fill` API and significant stability improvements for the test suite in concurrent environments.
