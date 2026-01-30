@@ -1,221 +1,351 @@
-# egui-async
+# 🔮 egui-async
 
-[![Crates.io](https://img.shields.io/crates/v/egui-async)](https://crates.io/crates/egui-async)
-[![Docs.rs](https://docs.rs/egui-async/badge.svg)](https://docs.rs/egui-async)
-[![License](https://img.shields.io/crates/l/egui-async)](https://snyk.io/articles/apache-license/#apache-license-vs-mit)
+A simple, batteries-included library for running async tasks across frames in [`egui`](https://egui.rs/) and binding their results to your UI.
 
-A simple, batteries-included, library for running async tasks across frames in [`egui`](https://crates.io/crates/egui) and binding their results to your UI.
+Supports both **native** (Tokio) and **wasm32** (Web) targets out of the box.
 
-Supports both native and wasm32 targets.
+## 📖 Overview
+
+Immediate-mode GUI libraries like `egui` are fantastic, but they pose a significant challenge: **how do you run long-running async tasks (like HTTP requests or file I/O) without freezing the UI thread?**
+
+`egui-async` solves this by providing a `Bind<T, E>` struct. This struct acts as a state machine that bridges the gap between your immediate-mode render loop and your background async runtime.
+
+It handles the lifecycle of the Future, manages the state transitions (`Idle` → `Pending` → `Finished`), and provides ergonomic UI widgets to visualize that state.
+
+## ✨ Features
+
+* 🔄 **Smart State Management**: Automatically tracks `Idle`, `Pending`, and `Finished` states. No more manual `Option<Result<...>>` juggling.
+* 🌐 **Universal Support**: Seamlessly switches between `tokio` (native) and `wasm-bindgen-futures` (web). Write your code once, run everywhere.
+* ⚡ **Lazy Loading**: `read_or_request` allows you to ergonomically trigger async fetches just by trying to read the data in your UI code.
+* ⏱️ **Periodic Updates**: Built-in support for polling data at specific intervals (e.g., every 10 seconds).
+* 🛑 **Task Abortion**: Supports physically aborting background tasks on native targets when the UI state changes.
+* 🛠️ **Batteries Included**: Includes the async runtime for you, along with helper widgets like a refresh button, error popups with retry logic, and more.
+
+## 📦 Installation
+
+```bash
+cargo add egui-async
+```
+
+### 🧩 Compatibility
+
+`egui` APIs change frequently. Ensure you are using a compatible version of `egui-async` for your project.
+
+| `egui-async` | `egui` |
+|:------------:|:------:|
+| `>=0.2.0`      | `0.33` |
+| `<=0.1.1`      | `0.32` |
+
+## 🚀 Quick Start
+
+Using `egui-async` requires two steps: registering the plugin and using a `Bind`.
+
+### 1. Register the Plugin
+
+You **must** register the `EguiAsyncPlugin` in your update loop. This drives the frame timers and ensures background tasks can request UI repaints.
 
 ```rust
-if let Some(res) = self.data_bind.read_or_request(|| async {
+impl eframe::App for MyApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // 👇 Crucial: Call this once per frame!
+        ctx.plugin_or_default::<egui_async::EguiAsyncPlugin>(); 
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            // Your UI code here...
+        });
+    }
+}
+```
+
+### 2. Bind Data
+
+Use `Bind<T, E>` to manage your data.
+
+```rust
+use egui_async::Bind;
+
+struct MyApp {
+    // Holds a Result<String, String>
+    my_ip: Bind<String, String>,
+}
+
+// Inside your update loop:
+if let Some(res) = self.my_ip.read_or_request(|| async {
+    // This async block runs in the background!
     reqwest::get("https://icanhazip.com/")
         .await
         .map_err(|e| e.to_string())?
         .text()
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string()) // Our Bind<, E> error type is String
 }) {
     match res {
-        Ok(ip) => {
-            ui.label(format!("Your public IP is: {ip}"));
-        }
-        Err(err) => {
-            ui.colored_label(
-                egui::Color32::RED,
-                format!("Could not fetch IP.\nError: {err}"),
-            );
-        }
+        Ok(ip)  => ui.label(format!("IP: {ip}")),
+        Err(err) => ui.colored_label(egui::Color32::RED, err),
     }
 } else {
-    ui.label("Getting public IP...");
+    // While the future is running, this block (None) block executes:
     ui.spinner();
 }
 ```
 
-## What is this?
+## 💡 Usage Patterns
 
-Immediate-mode GUI libraries like `egui` are fantastic, but they pose a challenge: how do you run a long-running or async task (like a network request), between frames, without blocking the UI thread?
+`egui-async` is designed to fit several different UI patterns depending on how much control you need.
 
-`egui-async` provides a simple `Bind<T, E>` struct that wraps an async task, manages its state (`Idle`, `Pending`, `Finished`), and provides ergonomic helpers to render the UI based on that state.
+### Pattern 1: Lazy Loading ("The Getter")
 
-It works with both `tokio` on native and `wasm-bindgen-futures` on the web, right out of the box.
+**Scenario:** You have data that should load automatically when the user opens a specific tab or window.
 
-## Features
-
-- **Simple State Management**: Wraps any `Future` and tracks its state.
-- **WASM Support**: Works seamlessly on both native and `wasm32` targets.
-- **Ergonomic Helpers**: Methods like `read_or_request_or_error` simplify UI logic into a single line.
-- **Convenient Widgets**: Includes a `refresh_button` and helpers for error popups.
-- **Minimal Dependencies**: Built on `tokio` and (for wasm) `wasm-bindgen-futures`.
-
-## How it Works
-
-`egui-async` works by bridging `egui`'s immediate-mode rendering loop with a background async runtime.
-
-1.  **Plugin Registration**: You must register the `EguiAsyncPlugin` with `egui`. The easiest way is to call `ctx.plugin_or_default::<egui_async::EguiAsyncPlugin>();` once per frame. This plugin updates a global frame timer used by all `Bind` instances.
-2.  **`Bind::request()`**: When you start an operation, it spawns a `Future` onto a runtime (`tokio` on native, `wasm-bindgen-futures` on web).
-3.  **Communication**: The spawned task is given a `tokio::sync::oneshot::Sender`. When the future completes, it sends the `Result` back to the `Bind` instance, which holds the `Receiver`.
-4.  **Polling**: On each frame, `Bind` checks its receiver to see if the result has arrived. If it has, `Bind` transitions from the `Pending` state to the `Finished` state.
-5.  **UI Update**: Your UI code can then check the `Bind`'s state and display the data, an error, or a loading indicator.
-
-## Quickstart
-
-Here is a minimal example using `eframe` that shows how to fetch data from an async function.
-
-First, add `egui-async` to your dependencies:
-
-```sh
-cargo add egui-async
-```
-
-Then, use the `Bind` struct in your application:
+**Solution:** Use `read_or_request`. If the data isn't there, it triggers the request and returns `None` (so you can show a spinner). If it is there, it returns the data.
 
 ```rust
-use eframe::egui;
-use egui_async::{Bind, EguiAsyncPlugin};
-
-struct MyApp {
-    /// The Bind struct holds the state of our async operation.
-    data_bind: Bind<String, String>,
-}
-
-impl Default for MyApp {
-    fn default() -> Self {
-        Self {
-            // We initialize the Bind and tell it to not retain data
-            // if it's not visible for a frame.
-            // If set to true, this will retain data even as the
-            // element goes undrawn.
-            data_bind: Bind::new(false), // Same as Bind::default()
-        }
-    }
-}
-
-impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // This registers the plugin that drives the async event loop.
-        // It's idempotent and cheap to call on every frame.
-        ctx.plugin_or_default::<EguiAsyncPlugin>(); // <-- REQUIRED
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Async Data Demo");
-            ui.add_space(10.0);
-
-            // Request if `data_bind` is None and idle
-            // Otherwise, just read it
-            if let Some(res) = self.data_bind.read_or_request(|| async {
-                reqwest::get("https://icanhazip.com/")
-                    .await
-                    .map_err(|e| e.to_string())?
-                    .text()
-                    .await
-                    .map_err(|e| e.to_string())
-            }) {
-                match res {
-                    Ok(ip) => {
-                        ui.label(format!("Your public IP is: {ip}"));
-                    }
-                    Err(err) => {
-                        ui.colored_label(
-                            egui::Color32::RED,
-                            format!("Could not fetch IP.\nError: {err}"),
-                        );
-                    }
-                }
-            } else {
-                ui.label("Getting public IP...");
-                ui.spinner();
-            }
-        });
-    }
-}
-
-// Boilerplate
-fn main() -> eframe::Result {
-    let native_options = eframe::NativeOptions::default();
-    eframe::run_native(
-        "egui-async example",
-        native_options,
-        Box::new(|_cc| Ok(Box::new(MyApp::default()))),
-    )
+// If data is missing, start fetching it. 
+// If fetching, show a spinner. 
+// If finished, show the result.
+if let Some(result) = self.data.read_or_request(fetch_data) {
+    ui.label(format!("Data: {:?}", result));
+} else {
+    ui.spinner();
 }
 ```
 
-## Common API Patterns
+### Pattern 2: Explicit State Control ("Full State Machine")
 
-`egui-async` offers several helper methods on `Bind` to handle common UI scenarios. Here are the most frequently used patterns.
+**Scenario:** You need a complex UI that looks completely different depending on whether it is loading, failed, or successful (e.g., a login screen).
 
-### The Full State Machine: `state_or_request`
-
-This is the most powerful and explicit pattern. Use it when you want to render a different UI for every possible state: `Pending`, `Finished` with data, `Failed` with an error, or `Idle`. It's perfect for detailed components that need to show loading spinners, error messages, and the final data.
+**Solution:** Use `state_or_request` to match exhaustively on every possible state.
 
 ```rust
 use egui_async::StateWithData;
 
-match self.data_bind.state_or_request(my_async_fn) {
-    StateWithData::Idle => { /* This is usually skipped */ }
-    StateWithData::Pending => { ui.spinner(); }
-    StateWithData::Finished(data) => { ui.label(format!("Success: {data}")); }
-    StateWithData::Failed(err) => { ui.colored_label(egui::Color32::RED, err.to_string()); }
-}
-```
+match self.login.state() {
+    StateWithData::Idle => {
+        // State: Idle -> Show Input Form
+        ui.label("Please enter your credentials:");
+        ui.add_space(10.0);
 
------
+        // Use a Grid to align the labels and text boxes nicely
+        egui::Grid::new("login_form")
+            .num_columns(2)
+            .spacing([10.0, 10.0])
+            .show(ui, |ui| {
+                ui.label("Username:");
+                ui.text_edit_singleline(&mut self.username);
+                ui.end_row();
 
-### Simple Data Display: `read_or_request`
+                ui.label("Password:");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.password).password(true),
+                );
+                ui.end_row();
+            });
 
-Use this pattern when you primarily care about the successful result and want a simple loading state. It returns an `Option<&Result<T, E>>`. If the value is `Some`, you can handle the `Ok` and `Err` cases. If it's `None`, the request is `Pending`, so you can show a spinner.
+        ui.add_space(20.0);
 
-```rust
-if let Some(result) = self.data_bind.read_or_request(my_async_fn) {
-    match result {
-        Ok(data) => { ui.label(format!("Your IP is: {data}")); }
-        Err(err) => { ui.colored_label(egui::Color32::RED, err.to_string()); }
+        // TRIGGER: User clicks button -> Transitions to Pending
+        if ui.button("Log In").clicked() {
+            let fut = perform_login(self.username.clone(), self.password.clone());
+            self.login.request(fut);
+        }
     }
-} else {
-    ui.spinner();
-    ui.label("Loading...");
+
+    StateWithData::Pending => {
+        // State: Pending -> Show Loading Indicator
+        // We disable inputs or just hide them. Here we show a spinner.
+        ui.spinner();
+        ui.label("Authenticating...");
+
+        ui.add_space(10.0);
+
+        // Option: Allow cancelling the request
+        if ui.button("Cancel").clicked() {
+            // On native, this physically aborts the tokio task if configured
+            self.login.clear();
+        }
+    }
+
+    StateWithData::Finished(success_msg) => {
+        // State: Finished (Ok) -> Show Success Screen
+        ui.label(
+            egui::RichText::new("Login Successful!")
+                .color(egui::Color32::GREEN)
+                .size(20.0),
+        );
+        ui.label(success_msg);
+
+        ui.add_space(20.0);
+
+        // TRIGGER: Reset to Idle to allow logging in again
+        if ui.button("Log Out").clicked() {
+            self.username.clear();
+            self.password.clear();
+            self.login.clear();
+        }
+    }
+
+    StateWithData::Failed(err_msg) => {
+        // State: Failed (Err) -> Show Error and Retry
+        ui.label(
+            egui::RichText::new("Login Failed")
+                .color(egui::Color32::RED)
+                .strong(),
+        );
+        ui.label(err_msg);
+
+        ui.add_space(20.0);
+
+        // TRIGGER: Reset to Idle to try again (keeps previous username/pass typed in)
+        if ui.button("Try Again").clicked() {
+            self.login.clear();
+        }
+    }
 }
 ```
 
------
+### Pattern 3: The Live Feed ("Periodic Refresh")
 
-### Periodic Refresh: `request_every_sec`
+**Scenario:** You are building a dashboard and need to fetch status updates every 5 seconds.
 
-Use this for data that should be updated automatically on a timer, like a dashboard widget. You provide an interval in seconds, and `egui-async` will trigger a new request when the interval has passed since the last successful completion.
+**Solution:** Use `request_every_sec`. It respects the timer and only triggers a new request when the interval has elapsed since the *last completion*.
 
 ```rust
-// In your update loop:
-let refresh_interval_secs = 20.0;
-self.live_data.request_every_sec(fetch_live_data, refresh_interval_secs);
+// Automatically re-run the future if 5.0 seconds have passed since the last finish.
+self.server_status.request_every_sec(check_server_health, 5.0);
 
-// You can still read the data to display it
-if let Some(Ok(data)) = self.live_data.read() {
-    ui.label(format!("Live data: {data}"));
+// Display the current (cached) data
+if let Some(Ok(status)) = self.server_status.read() {
+    ui.label(format!("Server Status: {status}"));
 }
+
 ```
 
-## License
+### Pattern 4: The Power User ("Widgets")
+
+**Scenario:** You want a standard "Refresh" button that handles debouncing, loading spinners, and tooltips automatically.
+
+**Solution:** Use the `UiExt` trait methods like `refresh_button` or `popup_error`.
+
+```rust
+use egui_async::UiExt; // Import the trait
+
+// Renders a button that spins while Pending.
+// Clicking it forces a refresh.
+// It also auto-refreshes every 60 seconds.
+//
+// We use egui's underlying monotonic clock for timing,
+// so we aren't making IO time calls every frame! 😉
+ui.refresh_button(&mut self.data, fetch_data, 60.0);
+
+// If the bind failed, show a popup window with the error and a "Retry" button.
+self.data.read_or_error(fetch_data, ui);
+```
+
+### 🧑‍💻 See it in action:
+
+You can find complete, runnable examples for all these patterns in the [`examples/`](https://github.com/xangelix/egui-async/tree/main/examples) directory of the repository:
+
+* [`simple.rs`](examples/simple.rs) – A minimal HTTP fetch example.
+* [`login.rs`](examples/login.rs) – The full "State Machine" pattern with forms and validation.
+* [`periodic.rs`](examples/periodic.rs) – A dashboard widget that auto-refreshes.
+* [`advanced.rs`](examples/advanced.rs) - An online, IP locator tool
+
+Look at the code before you run it and try to predict what it does and looks like!
+
+## ⚙️ Configuration
+
+### Retain Policy
+
+By default (`Bind::default()`), `egui-async` assumes immediate-mode behavior: if you stop calling `poll()` (or `read_*`) on a Bind for a frame, it assumes the UI element is no longer visible and drops the data to save memory and reset the state.
+
+If you want to keep data and state even when the UI component is hidden (e.g., inside a collapsed header or a closed tab), set `retain` to true:
+
+```rust
+let mut bind = Bind::new(true); // Retain = true
+```
+
+### Native Task Abort
+
+On native targets (non-WASM), you can configure `Bind` to physically abort the Tokio task when the request is cleared or overwritten. This is useful for cancelling heavy computations or large downloads.
+
+```rust
+let mut bind = Bind::new(true);
+bind.set_abort(true); // Enable physical cancellation (Native only)
+```
+
+> **⚠️ WebAssembly Note:**
+>
+> Due to browser limitations, `set_abort` has no effect on WASM targets. The `Future` will run to completion, but its result will be ignored by the `Bind`.
+>
+> There are some methods to do this inside the browser if you desire, but you will need to manually implement it.
+
+### 🔧 Under the Hood
+
+How does `egui-async` bridge the gap between Immediate Mode GUI (60fps loop) and Asynchronous Runtimes?
+
+1. **The Plugin**: The `EguiAsyncPlugin` acts as the heartbeat. It synchronizes a global atomic clock with `egui`'s input time. This allows `Bind` instances to measure durations (like "time since finished") without expensive syscalls or mutex locking on every frame.
+2. **The Channel**: When you call `request()`, we spawn a task on the runtime (Tokio or Wasm). We give that task a `oneshot::Sender`. The `Bind` struct holds the `oneshot::Receiver`.
+3. **Non-Blocking Polling**: On every frame where the UI element is drawn, `Bind::poll()` checks the receiver.
+* If the channel is empty, it returns `Pending` (and `egui` continues drawing).
+* If the channel has data, it moves the state to `Finished`.
+* **Crucially**, if the data arrives between frames, `Bind` _automatically requests a repaint_ from the `Context`, ensuring your UI updates immediately without user interaction.
+
+#### Spawning
+
+On **Native** targets, tasks are spawned onto the `tokio` runtime (specifically using `tokio::spawn`). 
+
+On **WASM** targets, tasks are spawned onto the browser's event loop using `wasm_bindgen_futures::spawn_local`. This detection happens automatically at compile time.
+
+### ⚠️ Common Issues
+
+**1. Forgetting the Plugin**
+If your UI is stuck in `Pending` forever or your periodic requests aren't triggering, check your `update` loop.
+
+```rust
+fn update(...) {
+    // Without this, egui-async has no concept of time!
+    ctx.plugin_or_default::<egui_async::EguiAsyncPlugin>(); 
+    // ...
+}
+
+```
+
+**2. Dropping the Bind**
+The `Bind` struct owns the receiving end of the async channel. If you create a `Bind` inside a function scope (local variable) instead of your App struct, it will be dropped at the end of the function, cancelling the specific UI binding.
+
+* **Bad:** `let mut my_bind = Bind::new(false);` inside `update()`.
+* **Good:** `self.my_bind` inside `struct MyApp`.
+
+**3. The "Disappearing Data" Mystery**
+By default, `Bind` uses `retain = false`. This means if `read()` or `poll()` is **not** called during a specific frame (e.g., the user switched to a different tab in your app), `egui-async` assumes the data is no longer needed and clears it to free memory.
+
+* **Fix:** If you want data to persist while hidden, use `Bind::new(true)`.
+
+#### 🌍 WASM Configuration
+
+Some crates have features that must be enabled, or must be disabled, under WASM or WASM running in a browser runtime. If you're seeing nonsensical errors in your browser console, consider removing dependencies until things work, then slowly adding them back to see what breaks the runtime.
+
+A very common example of this issue is the `getrandom` crate. Be sure to read relevant documentation for how to handle the browser runtime. [See the `getrandom` wasm32 documentation](https://docs.rs/getrandom/0.3.4/getrandom/#webassembly-support).
+
+## 🤝 Contributing
+
+Contributions are more than welcome! If you find a bug or have a feature request, please open an issue. If you want to contribute code, please submit a pull request.
+
+There are many opportunities to create async-native structs on the UiExt trait inside of `src/egui.rs` that would make for great first-contributions!
+
+### Special thank you to our contributors:
+
+- @sectore
+
+## ⚖️ License
 
 This project is licensed under either of
 
-- Apache License, Version 2.0, ([LICENSE-APACHE](https://spdx.org/licenses/Apache-2.0))
-- MIT license ([LICENSE-MIT](https://spdx.org/licenses/MIT))
+* Apache License, Version 2.0, ([LICENSE-APACHE](https://spdx.org/licenses/Apache-2.0))
+* MIT license ([LICENSE-MIT](https://spdx.org/licenses/MIT))
 
 at your option.
 
-## Contribution
-
-Contributions are welcome! Please feel free to submit a pull request or open an issue.
-
-## Todo
-
-In the future I may consider a registry architecture rather than polling on each request, which would allow mature threading-- however this poses unique difficulties of its own. Feel free to take a shot at it in a PR.
-
-A builder API is a likely "want" for 1.0.
-
-## Notes
+## Note
 
 This is **not** an official `egui` product. Please refer to [https://github.com/emilk/egui](https://github.com/emilk/egui) for official crates and recommendations.
