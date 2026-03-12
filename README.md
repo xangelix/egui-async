@@ -252,9 +252,9 @@ You can find complete, runnable examples for all these patterns in the [`example
 * [`simple.rs`](examples/simple.rs) – A minimal HTTP fetch example.
 * [`login.rs`](examples/login.rs) – The full "State Machine" pattern with forms and validation.
 * [`periodic.rs`](examples/periodic.rs) – A dashboard widget that auto-refreshes.
-* [`advanced.rs`](examples/advanced.rs) - An online, IP locator tool
+* [`advanced.rs`](examples/advanced.rs) - An online, IP locator tool, with maps
 
-Look at the code before you run it and try to predict what it does and looks like!
+Look at the code before you run it and try to predict what it does and what it will look like!
 
 ## ⚙️ Configuration
 
