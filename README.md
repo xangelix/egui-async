@@ -23,7 +23,7 @@ It handles the lifecycle of the Future, manages the state transitions (`Idle` �
 * ⚡ **Lazy Loading**: `read_or_request` allows you to ergonomically trigger async fetches just by trying to read the data in your UI code.
 * ⏱️ **Periodic Updates**: Built-in support for polling data at specific intervals (e.g., every 10 seconds).
 * 🛑 **Task Abortion**: Supports physically aborting background tasks on native targets when the UI state changes.
-* 🧩 **Enterprise Widgets**: Drop-in UI components like `AsyncButton`, `AsyncSearch`, and `AsyncView` that handle spinners, debouncing, and layout snapping automatically.
+* 🧩 **Widgets**: Drop-in UI components like `AsyncButton`, `AsyncSearch`, and `AsyncView` that handle spinners, debouncing, and layout snapping automatically.
 * 🛠️ **Batteries Included**: Includes the async runtime for you, along with helper extension traits for popups and retry logic.
 
 ## 📦 Installation
@@ -94,15 +94,13 @@ if let Some(res) = self.my_ip.read_or_request(|| async {
 }
 ```
 
-## 💡 Usage Patterns
+## 💡 Common Usage Patterns & Examples
 
 `egui-async` is designed to fit several different UI patterns depending on how much control you need.
 
-### Pattern 1: Lazy Loading ("The Getter")
+### 1. Lazy Loading
 
-**Scenario:** You have data that should load automatically when the user opens a specific tab or window.
-
-**Solution:** Use `read_or_request`. If the data isn't there, it triggers the request and returns `None` (so you can show a spinner). If it is there, it returns the data.
+Use `read_or_request` to defer network or I/O operations until the UI explicitly attempts to render the data. If the data is absent, the request is triggered and the method returns `None`, allowing you to render a loading state.
 
 ```rust
 // If data is missing, start fetching it. 
@@ -115,11 +113,9 @@ if let Some(result) = self.data.read_or_request(fetch_data) {
 }
 ```
 
-### Pattern 2: Explicit State Control ("Full State Machine")
+### 2. Explicit State Control
 
-**Scenario:** You need a complex UI that looks completely different depending on whether it is loading, failed, or successful (e.g., a login screen).
-
-**Solution:** Use `state_or_request` to match exhaustively on every possible state.
+For more complex UI flows, such as authentication screens, use `state_or_request` to exhaustively match against the underlying state machine (`Idle`, `Pending`, `Finished`, or `Failed`). This provides full control over the layout during transitions.
 
 ```rust
 use egui_async::StateWithData;
@@ -208,11 +204,9 @@ match self.login.state() {
 }
 ```
 
-### Pattern 3: The Live Feed ("Periodic Refresh")
+### 3. Periodic Polling
 
-**Scenario:** You are building a dashboard and need to fetch status updates every 5 seconds.
-
-**Solution:** Use `request_every_sec`. It respects the timer and only triggers a new request when the interval has elapsed since the *last completion*.
+Use `request_every_sec` to automatically re-trigger asynchronous tasks at fixed intervals. To prevent request stacking, the interval timer is calculated strictly from the completion of the previous request.
 
 ```rust
 // Automatically re-run the future if 5.0 seconds have passed since the last finish.
@@ -225,11 +219,9 @@ if let Some(Ok(status)) = self.server_status.read() {
 
 ```
 
-### Pattern 4: The Power User ("Ui Extensions")
+### 4. UI Extension Traits
 
-**Scenario:** You want a standard "Refresh" button that handles debouncing, loading spinners, and tooltips automatically.
-
-**Solution:** Use the `UiExt` trait methods like `refresh_button` or `popup_error`.
+`egui-async` provides the `UiExt` trait to inject asynchronous behaviors directly into `egui::Ui`. This includes standardized components like debounced refresh buttons and error popups.
 
 ```rust
 use egui_async::UiExt; // Import the trait
@@ -247,11 +239,9 @@ self.data.read_or_error(fetch_data, ui);
 
 ```
 
-### Pattern 5: Enterprise Widgets
+### 5. Other Built-in Widgets
 
-**Scenario:** You want battle-tested, drop-in UI components that handle loading states, layout snapping, and debouncing automatically without writing boilerplate.
-
-**Solution:** Use the included `egui_async::egui` widgets like `AsyncButton` or `AsyncView`.
+For other standard use cases, utilize the included drop-in widgets (`AsyncButton`, `AsyncSearch`, `AsyncView`). These components automatically handle loading states, input debouncing, and layout transitions.
 
 ```rust
 use egui_async::egui::{AsyncButton, AsyncView, StateLayout};

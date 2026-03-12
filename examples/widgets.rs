@@ -9,7 +9,7 @@ use egui_async::{
 fn main() -> eframe::Result {
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
-        "egui-async Enterprise Widgets",
+        "egui-async Widgets",
         native_options,
         Box::new(|_cc| Ok(Box::new(WidgetsApp::default()))),
     )
@@ -64,7 +64,7 @@ impl eframe::App for WidgetsApp {
         ctx.plugin_or_default::<EguiAsyncPlugin>();
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("egui-async Brand New Enterprise Widgets Demo");
+            ui.heading("egui-async Widgets Demo");
             ui.separator();
 
             // 1. AsyncButton
