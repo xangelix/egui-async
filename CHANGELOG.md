@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.6
+
+### Documentation
+
+- **README:** Streamlined the "Usage Patterns" section to improve readability.
+
 ## v0.3.5
 
 This release introduces a complete rewrite and revamp of the async widgets. It also includes documentation updates and dependency bumps.
