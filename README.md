@@ -23,7 +23,8 @@ It handles the lifecycle of the Future, manages the state transitions (`Idle` �
 * ⚡ **Lazy Loading**: `read_or_request` allows you to ergonomically trigger async fetches just by trying to read the data in your UI code.
 * ⏱️ **Periodic Updates**: Built-in support for polling data at specific intervals (e.g., every 10 seconds).
 * 🛑 **Task Abortion**: Supports physically aborting background tasks on native targets when the UI state changes.
-* 🛠️ **Batteries Included**: Includes the async runtime for you, along with helper widgets like a refresh button, error popups with retry logic, and more.
+* 🧩 **Enterprise Widgets**: Drop-in UI components like `AsyncButton`, `AsyncSearch`, and `AsyncView` that handle spinners, debouncing, and layout snapping automatically.
+* 🛠️ **Batteries Included**: Includes the async runtime for you, along with helper extension traits for popups and retry logic.
 
 ## 📦 Installation
 
@@ -36,9 +37,9 @@ cargo add egui-async
 `egui` APIs change frequently. Ensure you are using a compatible version of `egui-async` for your project.
 
 | `egui-async` | `egui` |
-|:------------:|:------:|
-| `>=0.2.0`      | `0.33` |
-| `<=0.1.1`      | `0.32` |
+| --- | --- |
+| `>=0.2.0` | `0.33` |
+| `<=0.1.1` | `0.32` |
 
 ## 🚀 Quick Start
 
@@ -224,7 +225,7 @@ if let Some(Ok(status)) = self.server_status.read() {
 
 ```
 
-### Pattern 4: The Power User ("Widgets")
+### Pattern 4: The Power User ("Ui Extensions")
 
 **Scenario:** You want a standard "Refresh" button that handles debouncing, loading spinners, and tooltips automatically.
 
@@ -243,6 +244,49 @@ ui.refresh_button(&mut self.data, fetch_data, 60.0);
 
 // If the bind failed, show a popup window with the error and a "Retry" button.
 self.data.read_or_error(fetch_data, ui);
+
+```
+
+### Pattern 5: Enterprise Widgets
+
+**Scenario:** You want battle-tested, drop-in UI components that handle loading states, layout snapping, and debouncing automatically without writing boilerplate.
+
+**Solution:** Use the included `egui_async::egui` widgets like `AsyncButton` or `AsyncView`.
+
+```rust
+use egui_async::egui::{AsyncButton, AsyncView, StateLayout};
+
+// A button that prevents double-clicks and shows an inline spinner
+AsyncButton::new(&mut self.submit_bind, "Submit")
+    .pending_text("Processing...")
+    .show(ui, perform_submission);
+
+// A declarative container that completely manages the Idle/Pending/Ok/Err lifecycle
+AsyncView::new(&mut self.data_bind)
+    .state_layout(StateLayout::CenterHorizontal)
+    .show(ui, fetch_data, |ui, data| {
+        ui.label(format!("Success: {data}"));
+    });
+
+```
+
+### 🛠️ Building Custom Widgets
+
+Building your own async-aware widgets is straightforward. Pass a `&mut Bind<T, E>` to your widget, and use its state methods (`is_pending()`, `read()`, etc.) to drive your rendering logic, calling `bind.request()` or `bind.refresh()` when the user interacts.
+
+```rust
+pub fn my_custom_widget(
+    ui: &mut egui::Ui, 
+    bind: &mut Bind<String, ()>, 
+    fetch: impl FnOnce() -> impl Future<Output = Result<String, ()>> + 'static
+) {
+    if bind.is_pending() {
+        ui.spinner();
+    } else if ui.button("Fetch Data").clicked() {
+        bind.request(fetch());
+    }
+}
+
 ```
 
 ### 🧑‍💻 See it in action:
@@ -252,7 +296,8 @@ You can find complete, runnable examples for all these patterns in the [`example
 * [`simple.rs`](examples/simple.rs) – A minimal HTTP fetch example.
 * [`login.rs`](examples/login.rs) – The full "State Machine" pattern with forms and validation.
 * [`periodic.rs`](examples/periodic.rs) – A dashboard widget that auto-refreshes.
-* [`advanced.rs`](examples/advanced.rs) - An online, IP locator tool, with maps
+* [`advanced.rs`](examples/advanced.rs) - An online, IP locator tool, with maps.
+* [`widgets.rs`](examples/widgets.rs) - A showcase of all included async widgets (`AsyncButton`, `AsyncSearch`, `AsyncView`).
 
 Look at the code before you run it and try to predict what it does and what it will look like!
 
@@ -290,13 +335,14 @@ How does `egui-async` bridge the gap between Immediate Mode GUI (60fps loop) and
 1. **The Plugin**: The `EguiAsyncPlugin` acts as the heartbeat. It synchronizes a global atomic clock with `egui`'s input time. This allows `Bind` instances to measure durations (like "time since finished") without expensive syscalls or mutex locking on every frame.
 2. **The Channel**: When you call `request()`, we spawn a task on the runtime (Tokio or Wasm). We give that task a `oneshot::Sender`. The `Bind` struct holds the `oneshot::Receiver`.
 3. **Non-Blocking Polling**: On every frame where the UI element is drawn, `Bind::poll()` checks the receiver.
+
 * If the channel is empty, it returns `Pending` (and `egui` continues drawing).
 * If the channel has data, it moves the state to `Finished`.
-* **Crucially**, if the data arrives between frames, `Bind` _automatically requests a repaint_ from the `Context`, ensuring your UI updates immediately without user interaction.
+* **Crucially**, if the data arrives between frames, `Bind` *automatically requests a repaint* from the `Context`, ensuring your UI updates immediately without user interaction.
 
 #### Spawning
 
-On **Native** targets, tasks are spawned onto the `tokio` runtime (specifically using `tokio::spawn`). 
+On **Native** targets, tasks are spawned onto the `tokio` runtime (specifically using `tokio::spawn`).
 
 On **WASM** targets, tasks are spawned onto the browser's event loop using `wasm_bindgen_futures::spawn_local`. This detection happens automatically at compile time.
 
