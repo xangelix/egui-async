@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.3.5
+
+This release introduces a complete rewrite and revamp of the async widgets. It also includes documentation updates and dependency bumps.
+
+### Added
+
+- **Widgets (`egui_async::egui`):** A suite of battle-tested, drop-in UI components that handle loading states, layout snapping, and debouncing automatically.
+  - **`AsyncButton`:** An action button that prevents double-submissions by disabling itself and showing an inline spinner while operations are pending. It calculates geometry ahead of time to ensure zero visual shifting between states.
+  - **`AsyncView`:** A declarative container that completely manages the `Idle`, `Pending`, `Failed`, and `Finished` lifecycles of a data fetch. It features a configurable `StateLayout` (e.g., `CenterHorizontal`, `Inline`) to prevent jarring layout snapping during state transitions.
+  - **`AsyncSearch`:** A decoupled text input widget that natively handles debounce timers and async typeahead searches, displaying results in a floating dropdown portal.
+
+### Documentation
+
+- **README:** Updated and reworded small examples in the `README.md` to introduce the new "Widgets" pattern and provide guidance on building custom async-aware components.
+
+### Chore
+
+- **Dependencies:** Bumped `dev-dependencies` to their latest versions.
+
 ## v0.3.4
 
 ### Fixed
