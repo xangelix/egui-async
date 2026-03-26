@@ -18,13 +18,13 @@ It handles the lifecycle of the Future, manages the state transitions (`Idle` �
 
 ## ✨ Features
 
-* 🔄 **Smart State Management**: Automatically tracks `Idle`, `Pending`, and `Finished` states. No more manual `Option<Result<...>>` juggling.
-* 🌐 **Universal Support**: Seamlessly switches between `tokio` (native) and `wasm-bindgen-futures` (web). Write your code once, run everywhere.
-* ⚡ **Lazy Loading**: `read_or_request` allows you to ergonomically trigger async fetches just by trying to read the data in your UI code.
-* ⏱️ **Periodic Updates**: Built-in support for polling data at specific intervals (e.g., every 10 seconds).
-* 🛑 **Task Abortion**: Supports physically aborting background tasks on native targets when the UI state changes.
-* 🧩 **Widgets**: Drop-in UI components like `AsyncButton`, `AsyncSearch`, and `AsyncView` that handle spinners, debouncing, and layout snapping automatically.
-* 🛠️ **Batteries Included**: Includes the async runtime for you, along with helper extension traits for popups and retry logic.
+- 🔄 **Smart State Management**: Automatically tracks `Idle`, `Pending`, and `Finished` states. No more manual `Option<Result<...>>` juggling.
+- 🌐 **Universal Support**: Seamlessly switches between `tokio` (native) and `wasm-bindgen-futures` (web). Write your code once, run everywhere.
+- ⚡ **Lazy Loading**: `read_or_request` allows you to ergonomically trigger async fetches just by trying to read the data in your UI code.
+- ⏱️ **Periodic Updates**: Built-in support for polling data at specific intervals (e.g., every 10 seconds).
+- 🛑 **Task Abortion**: Supports physically aborting background tasks on native targets when the UI state changes.
+- 🧩 **Widgets**: Drop-in UI components like `AsyncButton`, `AsyncSearch`, and `AsyncView` that handle spinners, debouncing, and layout snapping automatically.
+- 🛠️ **Batteries Included**: Includes the async runtime for you, along with helper extension traits for popups and retry logic.
 
 ## 📦 Installation
 
@@ -37,9 +37,9 @@ cargo add egui-async
 `egui` APIs change frequently. Ensure you are using a compatible version of `egui-async` for your project.
 
 | `egui-async` | `egui` |
-| --- | --- |
-| `>=0.2.0` | `0.33` |
-| `<=0.1.1` | `0.32` |
+| ------------ | ------ |
+| `>=0.2.0`    | `0.33` |
+| `<=0.1.1`    | `0.32` |
 
 ## 🚀 Quick Start
 
@@ -53,7 +53,7 @@ You **must** register the `EguiAsyncPlugin` in your update loop. This drives the
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // 👇 Crucial: Call this once per frame!
-        ctx.plugin_or_default::<egui_async::EguiAsyncPlugin>(); 
+        ctx.plugin_or_default::<egui_async::EguiAsyncPlugin>();
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // Your UI code here...
@@ -103,8 +103,8 @@ if let Some(res) = self.my_ip.read_or_request(|| async {
 Use `read_or_request` to defer network or I/O operations until the UI explicitly attempts to render the data. If the data is absent, the request is triggered and the method returns `None`, allowing you to render a loading state.
 
 ```rust
-// If data is missing, start fetching it. 
-// If fetching, show a spinner. 
+// If data is missing, start fetching it.
+// If fetching, show a spinner.
 // If finished, show the result.
 if let Some(result) = self.data.read_or_request(fetch_data) {
     ui.label(format!("Data: {:?}", result));
@@ -266,8 +266,8 @@ Building your own async-aware widgets is straightforward. Pass a `&mut Bind<T, E
 
 ```rust
 pub fn my_custom_widget(
-    ui: &mut egui::Ui, 
-    bind: &mut Bind<String, ()>, 
+    ui: &mut egui::Ui,
+    bind: &mut Bind<String, ()>,
     fetch: impl FnOnce() -> impl Future<Output = Result<String, ()>> + 'static
 ) {
     if bind.is_pending() {
@@ -283,11 +283,11 @@ pub fn my_custom_widget(
 
 You can find complete, runnable examples for all these patterns in the [`examples/`](https://github.com/xangelix/egui-async/tree/main/examples) directory of the repository:
 
-* [`simple.rs`](examples/simple.rs) – A minimal HTTP fetch example.
-* [`login.rs`](examples/login.rs) – The full "State Machine" pattern with forms and validation.
-* [`periodic.rs`](examples/periodic.rs) – A dashboard widget that auto-refreshes.
-* [`advanced.rs`](examples/advanced.rs) - An online, IP locator tool, with maps.
-* [`widgets.rs`](examples/widgets.rs) - A showcase of all included async widgets (`AsyncButton`, `AsyncSearch`, `AsyncView`).
+- [`simple.rs`](examples/simple.rs) – A minimal HTTP fetch example.
+- [`login.rs`](examples/login.rs) – The full "State Machine" pattern with forms and validation.
+- [`periodic.rs`](examples/periodic.rs) – A dashboard widget that auto-refreshes.
+- [`advanced.rs`](examples/advanced.rs) - An online, IP locator tool, with maps.
+- [`widgets.rs`](examples/widgets.rs) - A showcase of all included async widgets (`AsyncButton`, `AsyncSearch`, `AsyncView`).
 
 Look at the code before you run it and try to predict what it does and what it will look like!
 
@@ -326,9 +326,9 @@ How does `egui-async` bridge the gap between Immediate Mode GUI (60fps loop) and
 2. **The Channel**: When you call `request()`, we spawn a task on the runtime (Tokio or Wasm). We give that task a `oneshot::Sender`. The `Bind` struct holds the `oneshot::Receiver`.
 3. **Non-Blocking Polling**: On every frame where the UI element is drawn, `Bind::poll()` checks the receiver.
 
-* If the channel is empty, it returns `Pending` (and `egui` continues drawing).
-* If the channel has data, it moves the state to `Finished`.
-* **Crucially**, if the data arrives between frames, `Bind` *automatically requests a repaint* from the `Context`, ensuring your UI updates immediately without user interaction.
+- If the channel is empty, it returns `Pending` (and `egui` continues drawing).
+- If the channel has data, it moves the state to `Finished`.
+- **Crucially**, if the data arrives between frames, `Bind` _automatically requests a repaint_ from the `Context`, ensuring your UI updates immediately without user interaction.
 
 #### Spawning
 
@@ -344,7 +344,7 @@ If your UI is stuck in `Pending` forever or your periodic requests aren't trigge
 ```rust
 fn update(...) {
     // Without this, egui-async has no concept of time!
-    ctx.plugin_or_default::<egui_async::EguiAsyncPlugin>(); 
+    ctx.plugin_or_default::<egui_async::EguiAsyncPlugin>();
     // ...
 }
 
@@ -353,13 +353,13 @@ fn update(...) {
 **2. Dropping the Bind**
 The `Bind` struct owns the receiving end of the async channel. If you create a `Bind` inside a function scope (local variable) instead of your App struct, it will be dropped at the end of the function, cancelling the specific UI binding.
 
-* **Bad:** `let mut my_bind = Bind::new(false);` inside `update()`.
-* **Good:** `self.my_bind` inside `struct MyApp`.
+- **Bad:** `let mut my_bind = Bind::new(false);` inside `update()`.
+- **Good:** `self.my_bind` inside `struct MyApp`.
 
 **3. The "Disappearing Data" Mystery**
 By default, `Bind` uses `retain = false`. This means if `read()` or `poll()` is **not** called during a specific frame (e.g., the user switched to a different tab in your app), `egui-async` assumes the data is no longer needed and clears it to free memory.
 
-* **Fix:** If you want data to persist while hidden, use `Bind::new(true)`.
+- **Fix:** If you want data to persist while hidden, use `Bind::new(true)`.
 
 #### 🌍 WASM Configuration
 
@@ -381,8 +381,8 @@ There are many opportunities to create async-native structs on the UiExt trait i
 
 This project is licensed under either of
 
-* Apache License, Version 2.0, ([LICENSE-APACHE](https://spdx.org/licenses/Apache-2.0))
-* MIT license ([LICENSE-MIT](https://spdx.org/licenses/MIT))
+- Apache License, Version 2.0, ([LICENSE-APACHE](https://spdx.org/licenses/Apache-2.0))
+- MIT license ([LICENSE-MIT](https://spdx.org/licenses/MIT))
 
 at your option.
 
