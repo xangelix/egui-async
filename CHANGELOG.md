@@ -1,5 +1,57 @@
 # Changelog
 
+## v0.4.0
+
+This release brings full support for the highly anticipated **`egui` 0.34.0**. Because `egui` 0.34 introduces significant architectural changes to how immediate-mode rendering is handled, `egui-async` is publishing a breaking minor release to stay fully aligned.
+
+### ⚠️ Breaking Changes & Migration Guide
+
+`egui` 0.34 shifts the primary rendering entry point from `Context` to `Ui`. This heavily cleans up immediate-mode patterns but requires a few structural changes to your app to keep `egui-async` working smoothly.
+
+**1. The `App` Trait Split**
+
+`eframe::App::update` is now deprecated. You must split your application loop into `logic` (for background processing) and `ui` (for rendering).
+
+You should move your `EguiAsyncPlugin` registration into the `logic` block so it tracks time and handles background repaints without interfering with your UI tree:
+
+```rust
+impl eframe::App for MyApp {
+    // 1. Register the plugin here!
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        ctx.plugin_or_default::<egui_async::EguiAsyncPlugin>();
+    }
+
+    // 2. Render your UI here!
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // ...
+    }
+}
+```
+
+**2. Panel API Changes**
+
+Because you are now provided a root `&mut egui::Ui` directly in the `ui` loop, top-level panels like `CentralPanel::show(ctx, ...)` should be replaced with `CentralPanel::show_inside(ui, ...)`.
+
+**3. `Ui` now derefs to `Context`**
+
+You no longer need to call `.ctx()` to access context-level methods like repainting or clipboard access!
+
+- Change `ui.ctx().request_repaint()` to `ui.request_repaint()`.
+- Change `ui.ctx().copy_text(...)` to `ui.copy_text(...)`.
+
+### Changed
+
+- **Dependencies:** Bumped `egui`, `eframe`, and `egui_extras` (dev) to `0.34.0`.
+- **Plugin Architecture:** `egui::Plugin::on_begin_pass` now takes a `&mut egui::Ui` instead of `&egui::Context` upstream. `EguiAsyncPlugin` has been updated to reflect this signature change, seamlessly extracting the `Context` clone for Tokio background thread repainting.
+- **Core Widgets:** `AsyncSearch` and internal plugin hooks were updated to utilize the new `Deref<Target = Context> for Ui` trait.
+
+### Documentation
+
+- **Examples:** Refactored `advanced.rs`, `login.rs`, `periodic.rs`, `simple.rs`, and `widgets.rs` to implement the new `eframe::App` `logic`/`ui` split.
+- **README:** Updated the Quick Start guide and Common Pitfalls sections to teach the new `logic` plugin registration pattern.
+- **README:** Formatted to `prettier` defaults
+- **Compatibility Matrix:** Added the `egui` 0.34 matrix mapping.
+
 ## v0.3.6
 
 ### Documentation
@@ -38,10 +90,10 @@ This release focuses on documentation improvements to make the library easier to
 ### Documentation
 
 - **README Overhaul:** Completely rewrote the `README.md` to align with a cleaner, high-performance style.
-    - Introduced a **"Usage Patterns"** section covering Lazy Loading, Explicit State Machines, Periodic Refresh, and Widgets.
-    - Added an **"Under the Hood"** section explaining the plugin architecture, channel polling, and task spawning differences between Native and WASM.
-    - Added **"Common Pitfalls"** and **"Compatibility"** sections.
-    - Added a diagram placeholder for the event loop architecture.
+  - Introduced a **"Usage Patterns"** section covering Lazy Loading, Explicit State Machines, Periodic Refresh, and Widgets.
+  - Added an **"Under the Hood"** section explaining the plugin architecture, channel polling, and task spawning differences between Native and WASM.
+  - Added **"Common Pitfalls"** and **"Compatibility"** sections.
+  - Added a diagram placeholder for the event loop architecture.
 
 ### Added
 
