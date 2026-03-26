@@ -51,11 +51,13 @@ async fn perform_login(username: String, password: String) -> Result<String, Str
 }
 
 impl eframe::App for LoginApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // 1. Register the plugin (Required!)
         ctx.plugin_or_default::<EguiAsyncPlugin>();
+    }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.vertical(|ui| {
                 ui.heading("Login Portal");
                 ui.add_space(20.0);

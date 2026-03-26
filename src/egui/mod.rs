@@ -27,9 +27,10 @@ impl egui::Plugin for EguiAsyncPlugin {
         "egui_async"
     }
 
-    fn on_begin_pass(&mut self, ctx: &egui::Context) {
-        bind::CTX.get_or_init(|| ctx.clone());
-        let time = ctx.input(|i| i.time);
+    fn on_begin_pass(&mut self, ui: &mut egui::Ui) {
+        bind::CTX.get_or_init(|| ui.ctx().clone());
+
+        let time = ui.input(|i| i.time);
 
         let last_frame = bind::CURR_FRAME.swap(time, std::sync::atomic::Ordering::Relaxed);
         bind::LAST_FRAME.store(last_frame, std::sync::atomic::Ordering::Relaxed);

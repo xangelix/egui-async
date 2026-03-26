@@ -33,21 +33,23 @@ fn plugin_updates_globals() {
             time: Some(123.45),
             ..Default::default()
         };
-        ctx.begin_pass(input);
 
-        // Plugin hook runs in begin_frame via implicit call in `ctx.run` or manual plugin usage.
-        // EguiAsyncPlugin updates on `on_begin_pass`.
-        // We must simulate the plugin call.
-        let mut plugin = EguiAsyncPlugin;
-        egui::Plugin::on_begin_pass(&mut plugin, ctx);
+        let _ = ctx.run_ui(input, |ui| {
+            // Plugin hook runs in begin_frame via implicit call in `ctx.run_ui` or manual plugin usage.
+            // EguiAsyncPlugin updates on `on_begin_pass`.
+            // We must simulate the plugin call.
+            let mut plugin = EguiAsyncPlugin;
 
-        #[allow(clippy::float_cmp)]
-        {
-            assert_eq!(
-                CURR_FRAME.load(std::sync::atomic::Ordering::Relaxed),
-                123.45
-            );
-        }
+            egui::Plugin::on_begin_pass(&mut plugin, ui);
+
+            #[allow(clippy::float_cmp)]
+            {
+                assert_eq!(
+                    CURR_FRAME.load(std::sync::atomic::Ordering::Relaxed),
+                    123.45
+                );
+            }
+        });
     });
 }
 
@@ -60,8 +62,8 @@ fn plugin_debug_name() {
 #[test]
 fn ui_ext_read_methods() {
     with_context(|ctx| {
-        let _ = ctx.run(egui::RawInput::default(), |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| {
+        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            egui::CentralPanel::default().show_inside(ui, |ui| {
                 let mut b_ok: Bind<i32, String> = Bind::new(false);
                 b_ok.fill(Ok(10));
 
@@ -129,8 +131,8 @@ fn ui_ext_read_methods() {
 #[test]
 fn ui_widgets_execute() {
     with_context(|ctx| {
-        let _ = ctx.run(egui::RawInput::default(), |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| {
+        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            egui::CentralPanel::default().show_inside(ui, |ui| {
                 // Check popup_error execution
                 // We aren't clicking, so it returns false
                 assert!(!ui.popup_error("Testing Error Popup"));
@@ -174,8 +176,8 @@ fn refresh_button_interaction() {
         //
         // However, we CAN verify that `refresh_button` calls `request_every_sec` internally.
 
-        let _ = ctx.run(egui::RawInput::default(), |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| {
+        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            egui::CentralPanel::default().show_inside(ui, |ui| {
                 let mut b: Bind<i32, ()> = Bind::default();
                 // Set time such that it IS overdue to force automatic refresh logic
                 // Since bind uses CURR_FRAME global...

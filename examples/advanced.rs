@@ -72,12 +72,14 @@ async fn fetch_ip_location(ip: String) -> Result<(f64, f64), String> {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // This registers the plugin that drives the async event loop.
         // It's idempotent and cheap to call on every frame.
         ctx.plugin_or_default::<EguiAsyncPlugin>(); // <-- REQUIRED
+    }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.heading("egui-async Advanced Demo");
             ui.label("This example fetches your public IP address and looks up its geolocation.");
 

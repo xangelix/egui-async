@@ -38,6 +38,7 @@ cargo add egui-async
 
 | `egui-async` | `egui` |
 | ------------ | ------ |
+| `>=0.4.0`    | `0.34` |
 | `>=0.2.0`    | `0.33` |
 | `<=0.1.1`    | `0.32` |
 
@@ -47,15 +48,18 @@ Using `egui-async` requires two steps: registering the plugin and using a `Bind`
 
 ### 1. Register the Plugin
 
-You **must** register the `EguiAsyncPlugin` in your update loop. This drives the frame timers and ensures background tasks can request UI repaints.
+You **must** register the `EguiAsyncPlugin`. With `egui` 0.34, the best place to do this is in the `logic` step of your app, which runs before `ui` and manages background repaints.
 
 ```rust
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // 👇 Crucial: Call this once per frame!
         ctx.plugin_or_default::<egui_async::EguiAsyncPlugin>();
+    }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // We use `show_inside` because `ui` already provides a root UI context.
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             // Your UI code here...
         });
     }
@@ -339,15 +343,21 @@ On **WASM** targets, tasks are spawned onto the browser's event loop using `wasm
 ### ⚠️ Common Issues
 
 **1. Forgetting the Plugin**
-If your UI is stuck in `Pending` forever or your periodic requests aren't triggering, check your `update` loop.
+If your UI is stuck in `Pending` forever or your periodic requests aren't triggering, check your `App` implementation. `egui-async` requires its plugin to be registered every frame so it can track time and trigger background repaints.
+
+With `egui` 0.34+, the required place to do this is inside the `logic` function:
 
 ```rust
-fn update(...) {
-    // Without this, egui-async has no concept of time!
-    ctx.plugin_or_default::<egui_async::EguiAsyncPlugin>();
-    // ...
-}
+impl eframe::App for MyApp {
+    fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Without this, egui-async has no concept of time!
+        ctx.plugin_or_default::<egui_async::EguiAsyncPlugin>();
+    }
 
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // ... your UI code ...
+    }
+}
 ```
 
 **2. Dropping the Bind**
