@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.1
+
+### 🚨 Urgent Fixes
+
+- **State Retention on Suspension:** Fixed a critical issue where `Bind` instances (specifically those with `retain=false`) would aggressively and unexpectedly clear their data when the application window was minimized, completely occluded, or suspended by the OS. The plugin's internal time-tracker now correctly pauses during these non-rendering states, preventing your async widgets from thinking they missed a frame and inappropriately dropping state.
+- **Multi-Viewport Frame Drift (egui 0.34):** Fixed a bug where multiple viewports (such as tooltips or popups) triggering multiple passes per frame would cause the global async clock to drift. The plugin now strictly validates that the input time has actually progressed before advancing the internal clock.
+
 ## v0.4.0
 
 This release brings full support for the highly anticipated **`egui` 0.34.0**. Because `egui` 0.34 introduces significant architectural changes to how immediate-mode rendering is handled, `egui-async` is publishing a breaking minor release to stay fully aligned.
