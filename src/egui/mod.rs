@@ -30,9 +30,32 @@ impl egui::Plugin for EguiAsyncPlugin {
     fn on_begin_pass(&mut self, ui: &mut egui::Ui) {
         bind::CTX.get_or_init(|| ui.ctx().clone());
 
-        let time = ui.input(|i| i.time);
+        // Prevent `retain=false` Binds from aggressively clearing their state when
+        // the application is minimized, occluded, or suspended by the OS.
+        // If the UI isn't rendering an actual frame area, user widgets aren't running,
+        // which means they can't call `.poll()`. Pausing the time-tracker here
+        // prevents them from thinking they missed a frame.
+        let is_suspended = ui.input(|i| {
+            let info = i.viewport();
+            info.minimized.unwrap_or(false)
+                || info.occluded.unwrap_or(false)
+                || !info.visible().unwrap_or(true)
+        });
 
-        let last_frame = bind::CURR_FRAME.swap(time, std::sync::atomic::Ordering::Relaxed);
-        bind::LAST_FRAME.store(last_frame, std::sync::atomic::Ordering::Relaxed);
+        if is_suspended {
+            return;
+        }
+
+        let time = ui.input(|i| i.time);
+        let curr_time = bind::CURR_FRAME.load(std::sync::atomic::Ordering::Relaxed);
+
+        // Multiple viewports (like tooltips or popups) trigger multiple passes
+        // per frame, which can cause frame drift. We only advance the global
+        // clock if the input time has actually progressed.
+        #[allow(clippy::float_cmp)]
+        if curr_time != time {
+            let last_frame = bind::CURR_FRAME.swap(time, std::sync::atomic::Ordering::Relaxed);
+            bind::LAST_FRAME.store(last_frame, std::sync::atomic::Ordering::Relaxed);
+        }
     }
 }
