@@ -3,6 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/egui-async)](https://crates.io/crates/egui-async)
 [![Docs.rs](https://docs.rs/egui-async/badge.svg)](https://docs.rs/egui-async)
 [![License](https://img.shields.io/crates/l/egui-async)](https://snyk.io/articles/apache-license/#apache-license-vs-mit)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/xangelix?color=ea4aaa&style=flat)](https://github.com/sponsors/xangelix)
 
 A simple, batteries-included library for running async tasks across frames in [`egui`](https://egui.rs/) and binding their results to your UI.
 
