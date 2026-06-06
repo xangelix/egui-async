@@ -256,10 +256,10 @@ impl<'a, T, E> AsyncSearch<'a, T, E> {
                 }
 
                 match data {
-                    Some(Ok(results)) if results.is_empty() => {
-                        if bind_state != State::Pending && !is_debouncing {
-                            ui.weak("No results found.");
-                        }
+                    Some(Ok(results))
+                        if results.is_empty() && bind_state != State::Pending && !is_debouncing =>
+                    {
+                        ui.weak("No results found.");
                     }
                     Some(Ok(results)) => {
                         if bind_state == State::Pending || is_debouncing {
@@ -293,12 +293,10 @@ impl<'a, T, E> AsyncSearch<'a, T, E> {
                                 );
                             });
                     }
-                    Some(Err(_err)) => {
-                        if bind_state != State::Pending && !is_debouncing {
-                            ui.colored_label(ui.visuals().error_fg_color, "Search failed.");
-                        }
+                    Some(Err(_err)) if bind_state != State::Pending && !is_debouncing => {
+                        ui.colored_label(ui.visuals().error_fg_color, "Search failed.");
                     }
-                    None => {}
+                    _ => {}
                 }
             });
         })
