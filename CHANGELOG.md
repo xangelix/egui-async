@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.5.0
+
+This release bumps the project dependencies to **`egui` 0.35.0**, along with minor API adjustments, internal cleanups, and repository metadata updates.
+
+### Changed
+
+- **Dependencies:** Upgraded `egui` (optional dependency) and `eframe` (dev-dependency) to version `0.35`.
+- **Panel API:** Updated example files and tests to call `.show(ui, ...)` on `CentralPanel` instead of `.show_inside(ui, ...)` to align with `egui` 0.35 API.
+- **`ErrorPopup` API:** Relaxed the generic parameter of `ErrorPopup::id_source` to accept `impl egui::AsId` instead of `impl std::hash::Hash`.
+- **Async Search:** Refactored/simplified the match arm checks in `AsyncSearch`'s UI rendering logic by combining nested `if` statements into match guards.
+
+### Tooling & Chore
+
+- **EditorConfig:** Added rules to `.editorconfig` to enforce Unix-style line endings (`LF`) and ensure a final trailing newline for files.
+- **Dev-Dependencies:** Loosened dev-dependencies versions in `Cargo.toml` (`reqwest` to `0.13`, `rand` to `0.10`, `serde_json` to `1`, and `walkers` to `0.56`).
+
 ## v0.4.1
 
 ### 🚨 Urgent Fixes
