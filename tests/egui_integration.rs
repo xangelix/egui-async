@@ -3,8 +3,9 @@
 
 #![cfg(feature = "egui")]
 
-use egui_async::{Bind, EguiAsyncPlugin, UiExt, bind::CURR_FRAME};
 use std::sync::{Mutex, OnceLock};
+
+use egui_async::{Bind, EguiAsyncPlugin, UiExt, bind::CURR_FRAME};
 
 fn test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -63,7 +64,7 @@ fn plugin_debug_name() {
 fn ui_ext_read_methods() {
     with_context(|ctx| {
         let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
-            egui::CentralPanel::default().show_inside(ui, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
                 let mut b_ok: Bind<i32, String> = Bind::new(false);
                 b_ok.fill(Ok(10));
 
@@ -132,7 +133,7 @@ fn ui_ext_read_methods() {
 fn ui_widgets_execute() {
     with_context(|ctx| {
         let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
-            egui::CentralPanel::default().show_inside(ui, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
                 // Check popup_error execution
                 // We aren't clicking, so it returns false
                 assert!(!ui.popup_error("Testing Error Popup"));
@@ -177,7 +178,7 @@ fn refresh_button_interaction() {
         // However, we CAN verify that `refresh_button` calls `request_every_sec` internally.
 
         let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
-            egui::CentralPanel::default().show_inside(ui, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
                 let mut b: Bind<i32, ()> = Bind::default();
                 // Set time such that it IS overdue to force automatic refresh logic
                 // Since bind uses CURR_FRAME global...

@@ -19,7 +19,7 @@ impl<'a> ErrorPopup<'a> {
     }
 
     /// Overrides the default ID source. Useful if you have multiple distinct error popups.
-    pub fn id_source(mut self, id: impl std::hash::Hash) -> Self {
+    pub fn id_source(mut self, id: impl egui::AsId) -> Self {
         self.id_source = egui::Id::new(id);
         self
     }
