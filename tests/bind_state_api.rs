@@ -9,22 +9,24 @@ fn set_frame_times(curr: f64, last: f64) {
 }
 
 #[test]
-fn state_method_maps_ok_and_err_variants() {
+fn state_method_maps_ok_and_err_variants() -> Result<(), String> {
     set_frame_times(10.0, 9.0);
 
     let mut ok: Bind<&'static str, &'static str> = Bind::new(true);
     ok.fill(Ok("good"));
-    match ok.state() {
-        StateWithData::Finished(v) => assert_eq!(*v, "good"),
-        _ => panic!("expected Finished(..) variant"),
-    }
+    let StateWithData::Finished(v) = ok.state() else {
+        return Err("expected Finished(..) variant".into());
+    };
+    assert_eq!(*v, "good");
 
     let mut err: Bind<&'static str, &'static str> = Bind::new(true);
     err.fill(Err("bad"));
-    match err.state() {
-        StateWithData::Failed(e) => assert_eq!(*e, "bad"),
-        _ => panic!("expected Failed(..) variant"),
-    }
+    let StateWithData::Failed(e) = err.state() else {
+        return Err("expected Failed(..) variant".into());
+    };
+    assert_eq!(*e, "bad");
+
+    Ok(())
 }
 
 #[allow(clippy::float_cmp)]

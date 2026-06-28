@@ -231,9 +231,16 @@ fn read_mut_or_request_logic() {
         b.fill(Ok(10));
 
         // 4. Finished -> Return Mut
-        if let Some(Ok(val)) = b.read_mut_or_request(|| async { panic!("Should not run") }) {
+        let ran = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let ran_clone = ran.clone();
+        if let Some(Ok(val)) = b.read_mut_or_request(|| async move {
+            ran_clone.store(true, std::sync::atomic::Ordering::Relaxed);
+            Ok(0)
+        }) {
             *val = 20;
         }
+
+        assert!(!ran.load(std::sync::atomic::Ordering::Relaxed));
 
         assert_eq!(b.ok_ref(), Some(&20));
     });
@@ -251,7 +258,9 @@ fn poll_handle_closed_channel() {
 
         // We start a request that panics, dropping the sender side.
         b.request(async {
-            panic!("Force drop sender");
+            let zero = 0;
+            assert_eq!(zero, 1, "Force drop sender");
+            Ok(0)
         });
 
         // Loop with timeout waiting for the state to become Idle.

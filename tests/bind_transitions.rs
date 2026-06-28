@@ -88,7 +88,7 @@ fn request_ok_flow() {
 
 /// Error path: request → Pending → Finished(Err).
 #[test]
-fn request_err_flow() {
+fn request_err_flow() -> Result<(), String> {
     with_lock(|| {
         set_frame_times(0.0, -1.0);
         let mut b: Bind<u32, String> = Bind::default();
@@ -98,14 +98,15 @@ fn request_err_flow() {
 
         assert!(drive_until_finished(&mut b, 200));
 
-        match b.state() {
-            StateWithData::Failed(e) => assert_eq!(e, "nope"),
-            _ => panic!("expected Failed(..) state"),
-        }
+        let StateWithData::Failed(e) = b.state() else {
+            return Err("expected Failed(..) state".to_string());
+        };
+        assert_eq!(e, "nope");
 
         assert!(b.is_err());
         assert!(!b.is_ok());
-    });
+        Ok(())
+    })
 }
 
 /// `just_started` is true only in the start frame; `just_completed` only in the completion frame.
@@ -195,20 +196,20 @@ fn read_or_request_semantics() {
 
 /// `read_as_mut` allows in-place mutation of successful data.
 #[test]
-fn read_as_mut_allows_mutation() {
+fn read_as_mut_allows_mutation() -> Result<(), String> {
     with_lock(|| {
         set_frame_times(0.0, -1.0);
         let mut b: Bind<String, String> = Bind::default();
         b.fill(Ok("abc".into()));
 
-        if let Some(Ok(s)) = b.read_as_mut() {
-            s.push_str("123");
-        } else {
-            panic!("expected Some(Ok(_))");
-        }
+        let Some(Ok(s)) = b.read_as_mut() else {
+            return Err("expected Some(Ok(_))".to_string());
+        };
+        s.push_str("123");
 
         assert!(matches!(b.read(), Some(Ok(s)) if s == "abc123"));
-    });
+        Ok(())
+    })
 }
 
 /// When `retain=false`, skipping a frame where the bind is not drawn clears data.
