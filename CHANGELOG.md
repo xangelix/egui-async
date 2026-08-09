@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.0
+
+This release bumps the project dependencies to **`egui` 0.36.0**.
+
+### Changed
+
+- **Dependencies:** Upgraded `egui` (optional dependency) and `eframe` (dev-dependency) to version `0.36`.
+
 ## v0.5.0
 
 This release bumps the project dependencies to **`egui` 0.35.0**, along with minor API adjustments, internal cleanups, and repository metadata updates.
