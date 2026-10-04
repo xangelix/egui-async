@@ -88,11 +88,149 @@ mod native_tests {
 }
 
 #[cfg(target_family = "wasm")]
-#[test]
-fn test_wasm_abort_is_safe_noop() {
-    // On WASM, we just want to ensure the API exists and doesn't crash.
-    let mut b: egui_async::Bind<(), ()> = egui_async::Bind::new(false);
-    b.set_abort(true);
-    b.abort();
-    assert!(b.is_idle());
+mod wasm_tests {
+    use std::{cell::Cell, rc::Rc};
+
+    use egui_async::Bind;
+    use tokio::sync::oneshot;
+    use wasm_bindgen_futures::{JsFuture, js_sys::Promise, wasm_bindgen::JsValue};
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    struct DropTracker(Rc<Cell<bool>>);
+
+    impl Drop for DropTracker {
+        fn drop(&mut self) {
+            self.0.set(true);
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct Flags {
+        started: Rc<Cell<bool>>,
+        completed: Rc<Cell<bool>>,
+        dropped: Rc<Cell<bool>>,
+    }
+
+    /// A task that holds a drop guard and only completes once `gate` is released.
+    async fn gated_task(flags: Flags, gate: oneshot::Receiver<()>) -> Result<(), ()> {
+        let _guard = DropTracker(flags.dropped.clone());
+        flags.started.set(true);
+        gate.await.map_err(|_| ())?;
+        flags.completed.set(true);
+        Ok(())
+    }
+
+    /// Yields to the event loop, letting spawned local tasks run.
+    async fn tick() {
+        let _ = JsFuture::from(Promise::resolve(&JsValue::UNDEFINED)).await;
+    }
+
+    async fn wait_for(flag: &Cell<bool>) -> bool {
+        for _ in 0..100 {
+            if flag.get() {
+                return true;
+            }
+            tick().await;
+        }
+        flag.get()
+    }
+
+    async fn settle() {
+        for _ in 0..100 {
+            tick().await;
+        }
+    }
+
+    #[wasm_bindgen_test]
+    async fn abort_drops_task_without_completing() {
+        let flags = Flags::default();
+        let (gate_tx, gate_rx) = oneshot::channel();
+        let mut b: Bind<(), ()> = Bind::new(true);
+        b.set_abort(true);
+
+        b.request(gated_task(flags.clone(), gate_rx));
+        assert!(wait_for(&flags.started).await, "Task failed to start");
+
+        b.abort();
+        assert!(b.is_idle());
+        assert!(
+            wait_for(&flags.dropped).await,
+            "Task was not physically aborted"
+        );
+
+        // Releasing the gate cannot resume a dropped task.
+        assert!(gate_tx.send(()).is_err(), "Task still holds the gate");
+        settle().await;
+        assert!(!flags.completed.get(), "Aborted task ran to completion");
+    }
+
+    #[wasm_bindgen_test]
+    async fn request_replaces_and_aborts_previous() {
+        let flags = Flags::default();
+        let (_gate_tx, gate_rx) = oneshot::channel();
+        let mut b: Bind<(), ()> = Bind::new(true);
+        b.set_abort(true);
+
+        b.request(gated_task(flags.clone(), gate_rx));
+        assert!(wait_for(&flags.started).await, "First task failed to start");
+
+        // This request triggers abort() on the first one
+        b.request(async { Ok(()) });
+
+        assert!(
+            wait_for(&flags.dropped).await,
+            "Previous task was not aborted on new request"
+        );
+        assert!(!flags.completed.get(), "Aborted task ran to completion");
+    }
+
+    #[wasm_bindgen_test]
+    async fn abort_without_flag_lets_task_complete() {
+        let flags = Flags::default();
+        let (gate_tx, gate_rx) = oneshot::channel();
+        let mut b: Bind<(), ()> = Bind::new(true);
+
+        b.request(gated_task(flags.clone(), gate_rx));
+        assert!(wait_for(&flags.started).await, "Task failed to start");
+
+        b.abort();
+        assert!(b.is_idle());
+        settle().await;
+        assert!(!flags.dropped.get(), "Task was aborted without the flag");
+
+        gate_tx.send(()).expect("Task no longer holds the gate");
+        assert!(
+            wait_for(&flags.completed).await,
+            "Task did not run to completion"
+        );
+        assert!(flags.dropped.get());
+
+        // The result is discarded: the Bind stays idle without data.
+        assert!(b.is_idle());
+        assert!(b.read().is_none());
+    }
+
+    #[wasm_bindgen_test]
+    async fn dropped_bind_lets_task_complete() {
+        let flags = Flags::default();
+        let (gate_tx, gate_rx) = oneshot::channel();
+        let mut b: Bind<(), ()> = Bind::new(true);
+        b.set_abort(true);
+
+        b.request(gated_task(flags.clone(), gate_rx));
+        assert!(wait_for(&flags.started).await, "Task failed to start");
+
+        drop(b);
+        settle().await;
+        assert!(
+            !flags.dropped.get(),
+            "Task was aborted by dropping the Bind"
+        );
+
+        gate_tx.send(()).expect("Task no longer holds the gate");
+        assert!(
+            wait_for(&flags.completed).await,
+            "Task did not run to completion"
+        );
+    }
 }

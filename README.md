@@ -23,7 +23,7 @@ It handles the lifecycle of the Future, manages the state transitions (`Idle` �
 - 🌐 **Universal Support**: Seamlessly switches between `tokio` (native) and `wasm-bindgen-futures` (web). Write your code once, run everywhere.
 - ⚡ **Lazy Loading**: `read_or_request` allows you to ergonomically trigger async fetches just by trying to read the data in your UI code.
 - ⏱️ **Periodic Updates**: Built-in support for polling data at specific intervals (e.g., every 10 seconds).
-- 🛑 **Task Abortion**: Supports physically aborting background tasks on native targets when the UI state changes.
+- 🛑 **Task Abortion**: Supports physically aborting background tasks on native and WASM targets when the UI state changes.
 - 🧩 **Widgets**: Drop-in UI components like `AsyncButton`, `AsyncSearch`, and `AsyncView` that handle spinners, debouncing, and layout snapping automatically.
 - 🛠️ **Batteries Included**: Includes the async runtime for you, along with helper extension traits for popups and retry logic.
 
@@ -168,7 +168,7 @@ match self.login.state() {
 
         // Option: Allow cancelling the request
         if ui.button("Cancel").clicked() {
-            // On native, this physically aborts the tokio task if configured
+            // This physically aborts the background task if configured
             self.login.clear();
         }
     }
@@ -310,20 +310,31 @@ If you want to keep data and state even when the UI component is hidden (e.g., i
 let mut bind = Bind::new(true); // Retain = true
 ```
 
-### Native Task Abort
+### Task Abort
 
-On native targets (non-WASM), you can configure `Bind` to physically abort the Tokio task when the request is cleared or overwritten. This is useful for cancelling heavy computations or large downloads.
+You can configure `Bind` to physically abort the background task when the request is aborted, cleared, or overwritten. This is useful for cancelling heavy computations or large downloads.
 
 ```rust
 let mut bind = Bind::new(true);
-bind.set_abort(true); // Enable physical cancellation (Native only)
+bind.set_abort(true); // Enable physical cancellation
 ```
 
-> **⚠️ WebAssembly Note:**
+With the flag set, the in-flight task is aborted whenever the `Bind` lets go of it:
+
+- `abort()`, `clear()`, `refresh()`, or `fill()` is called.
+- A new `request()` replaces it.
+- With `retain = false`, the `Bind` is drawn again after missing a frame (e.g., the user switched tabs), which resets it.
+
+How the task is stopped depends on the target:
+
+- On **native** targets, the Tokio task is aborted.
+- On **WASM** targets, each request carries a small stop signal. The spawned task checks it before running your `Future` each time the browser polls it. Sending the signal also wakes the task, so it is dropped promptly, on the browser's next microtask turn. Your `Future` is never polled again after `abort()`.
+
+Without `set_abort(true)`, or if the `Bind` itself is dropped, the `Future` runs to completion and its result is ignored by the `Bind`.
+
+> **⚠️ Note:** Aborting stops the `Future` at its current `.await` point, so code after that point (e.g., saving a response or cleanup) will not run. Code in `Drop` implementations still runs.
 >
-> Due to browser limitations, `set_abort` has no effect on WASM targets. The `Future` will run to completion, but its result will be ignored by the `Bind`.
->
-> There are some methods to do this inside the browser if you desire, but you will need to manually implement it.
+> Aborting drops the Rust `Future`, but it does not necessarily cancel work the browser or runtime has already started. A `fetch` that was already sent may still reach the server, depending on the HTTP library. Tasks your `Future` spawned itself are not aborted either.
 
 ### 🔧 Under the Hood
 
@@ -379,6 +390,17 @@ By default, `Bind` uses `retain = false`. This means if `read()` or `poll()` is 
 Some crates have features that must be enabled, or must be disabled, under WASM or WASM running in a browser runtime. If you're seeing nonsensical errors in your browser console, consider removing dependencies until things work, then slowly adding them back to see what breaks the runtime.
 
 A very common example of this issue is the `getrandom` crate. Be sure to read relevant documentation for how to handle the browser runtime. [See the `getrandom` wasm32 documentation](https://docs.rs/getrandom/0.3.4/getrandom/#webassembly-support).
+
+#### 🧵 Threaded WASM
+
+`egui-async` supports threaded WebAssembly builds (`wasm32` with the `atomics` target feature). There, `egui::Context` is neither `Send` nor `Sync`, so `egui-async` keeps it in a thread-local on the thread that runs `EguiAsyncPlugin` (your main thread), and `bind::CTX` is not available.
+
+This works because `wasm_bindgen_futures::spawn_local` polls each task on the thread that spawned it, so results of requests made from the main thread are delivered where the context lives. In threaded builds, **only that thread can request a repaint**: a `Bind` driven from another thread (e.g., a Web Worker) still receives its result, but the UI will not repaint until something else triggers a frame.
+
+These limits apply on every target, threaded or not:
+
+- Results that arrive before the plugin's first frame do not request a repaint. The next frame still picks them up.
+- Only the first `egui::Context` the plugin sees receives repaints, so run one `egui` app per page.
 
 ## 🤝 Contributing
 

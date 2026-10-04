@@ -24,8 +24,58 @@ pub static ASYNC_RUNTIME: std::sync::LazyLock<tokio::runtime::Runtime> =
 /// A global holder for the `egui::Context`, used to request repaints from background tasks.
 ///
 /// This is initialized once by `EguiAsyncPlugin`.
-#[cfg(feature = "egui")]
+///
+/// Not available on threaded WASM (`wasm32` with the `atomics` target feature), where
+/// `egui::Context` is neither `Send` nor `Sync`. There, the context is kept in a thread-local
+/// on the thread that runs the plugin instead.
+#[cfg(all(
+    feature = "egui",
+    not(all(target_arch = "wasm32", target_feature = "atomics"))
+))]
 pub static CTX: std::sync::OnceLock<egui::Context> = std::sync::OnceLock::new();
+
+#[cfg(all(feature = "egui", target_arch = "wasm32", target_feature = "atomics"))]
+thread_local! {
+    /// Thread-local holder for the `egui::Context` on threaded WASM.
+    ///
+    /// Only the thread that runs `EguiAsyncPlugin` (the main thread) has a context. Tasks are
+    /// spawned with `wasm_bindgen_futures::spawn_local`, which polls them on the thread that
+    /// spawned them, so results requested from that thread are delivered where the context lives.
+    static CTX: std::cell::OnceCell<egui::Context> = const { std::cell::OnceCell::new() };
+}
+
+/// Stores the `egui::Context` used to request repaints, if it is not already set.
+#[cfg(feature = "egui")]
+pub(crate) fn init_ctx(ctx: &egui::Context) {
+    #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+    CTX.get_or_init(|| ctx.clone());
+
+    #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+    let _ = CTX.try_with(|cell| {
+        cell.get_or_init(|| ctx.clone());
+    });
+}
+
+/// Requests a repaint of the stored `egui::Context`, if one has been set.
+///
+/// On threaded WASM, only the thread that runs `EguiAsyncPlugin` can request a repaint; on any
+/// other thread this does nothing.
+fn request_repaint() {
+    #[cfg(all(
+        feature = "egui",
+        not(all(target_arch = "wasm32", target_feature = "atomics"))
+    ))]
+    if let Some(ctx) = CTX.get() {
+        ctx.request_repaint();
+    }
+
+    #[cfg(all(feature = "egui", target_arch = "wasm32", target_feature = "atomics"))]
+    let _ = CTX.try_with(|cell| {
+        if let Some(ctx) = cell.get() {
+            ctx.request_repaint();
+        }
+    });
+}
 
 /// Represents the execution state of an asynchronous operation managed by `Bind`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -69,13 +119,15 @@ bitflags::bitflags! {
         /// If `true`, the `data` from a `Finished` state is preserved even if the `Bind` instance
         /// is not polled for one or more frames. If `false`, the data is cleared.
         const RETAIN = 0b0000_0001;
-        /// Opt-in: Physically abort the background task on Native when
-        /// the Bind is cleared or a new request is made.
+        /// Opt-in: Physically abort the background task when the Bind is aborted,
+        /// cleared, or a new request is made.
         ///
-        /// **Warning:** This terminates the task immediately. If the future has
-        /// critical side effects (e.g., I/O, cleanup), they may not complete.
+        /// On native targets, the Tokio task is aborted. On WASM, the spawned local
+        /// task is dropped the next time the executor polls it, without polling the
+        /// future again.
         ///
-        /// Due to browser limitations, **this flag has no effect on WASM targets**.
+        /// **Warning:** This terminates the task at its current `.await` point. If the
+        /// future has critical side effects (e.g., I/O, cleanup), they may not complete.
         const ABORT  = 0b0000_0010;
     }
 }
@@ -95,6 +147,10 @@ struct InFlight<T, E> {
     /// The abort handle for the spawned task (native only).
     #[cfg(not(target_family = "wasm"))]
     handle: tokio::task::AbortHandle,
+
+    /// Signals the spawned task to stop (WASM only). Dropping it unsent lets the task run on.
+    #[cfg(target_family = "wasm")]
+    abort_tx: oneshot::Sender<()>,
 }
 
 impl<T, E> Debug for InFlight<T, E> {
@@ -105,14 +161,21 @@ impl<T, E> Debug for InFlight<T, E> {
         #[cfg(not(target_family = "wasm"))]
         out.field("handle", &self.handle);
 
+        #[cfg(target_family = "wasm")]
+        out.field("abort_tx", &"oneshot::Sender<()>");
+
         out.finish()
     }
 }
 
 impl<T, E> InFlight<T, E> {
-    fn abort(&self) {
+    fn abort(self) {
         #[cfg(not(target_family = "wasm"))]
         self.handle.abort();
+
+        // An error means the task already finished, so there is nothing to stop.
+        #[cfg(target_family = "wasm")]
+        let _ = self.abort_tx.send(());
     }
 
     fn poll_result(&mut self) -> Result<Result<T, E>, oneshot::error::TryRecvError> {
@@ -189,6 +252,30 @@ impl<T: 'static, E: 'static> Default for Bind<T, E> {
     }
 }
 
+/// Runs `task` until it completes or a stop signal arrives on `abort_rx`.
+///
+/// The receiver is polled before the task: `Ok` drops the task without polling it again, while
+/// `Err` (the sender was dropped unsent) stops listening and lets the task run to completion.
+#[cfg(target_family = "wasm")]
+async fn abortable(task: impl Future<Output = ()>, abort_rx: oneshot::Receiver<()>) {
+    use std::task::Poll;
+
+    let mut task = std::pin::pin!(task);
+    let mut abort_rx = Some(abort_rx);
+
+    std::future::poll_fn(|cx| {
+        if let Some(rx) = abort_rx.as_mut() {
+            match std::pin::Pin::new(rx).poll(cx) {
+                Poll::Ready(Ok(())) => return Poll::Ready(()),
+                Poll::Ready(Err(_)) => abort_rx = None,
+                Poll::Pending => {}
+            }
+        }
+        task.as_mut().poll(cx)
+    })
+    .await;
+}
+
 /// A trait alias for `Send` on native targets.
 ///
 /// On WASM, this trait has no bounds, allowing non-`Send` types to be used in `Bind`
@@ -253,8 +340,6 @@ impl<T: 'static, E: 'static> Bind<T, E> {
     }
 
     /// Returns whether background tasks are physically aborted when cleared or replaced.
-    ///
-    /// This flag only affects non-WASM targets.
     #[must_use]
     pub const fn abort_on_clear(&self) -> bool {
         self.config.contains(ConfigFlags::ABORT)
@@ -262,7 +347,7 @@ impl<T: 'static, E: 'static> Bind<T, E> {
 
     /// Sets whether background tasks are physically aborted when cleared or replaced.
     ///
-    /// **Note:** This has no effect on WASM targets due to browser execution models.
+    /// See [`ConfigFlags::ABORT`] for how this behaves on native and WASM targets.
     pub fn set_abort(&mut self, abort: bool) {
         if abort {
             self.config.insert(ConfigFlags::ABORT);
@@ -280,10 +365,7 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         let result = fut.await;
         if matches!(tx.send(result), Ok(())) {
             // If the send was successful, request a repaint to show the new data.
-            #[cfg(feature = "egui")]
-            if let Some(ctx) = CTX.get() {
-                ctx.request_repaint();
-            }
+            request_repaint();
         } else {
             // This occurs if the `Bind` was dropped before the future completed.
             warn!("Future result was dropped because the receiver was gone.");
@@ -322,8 +404,9 @@ impl<T: 'static, E: 'static> Bind<T, E> {
 
         #[cfg(target_family = "wasm")]
         let in_flight = {
-            wasm_bindgen_futures::spawn_local(Self::req_inner(f, tx));
-            InFlight { recv: rx }
+            let (abort_tx, abort_rx) = oneshot::channel();
+            wasm_bindgen_futures::spawn_local(abortable(Self::req_inner(f, tx), abort_rx));
+            InFlight { recv: rx, abort_tx }
         };
 
         self.in_flight = Some(in_flight);
@@ -369,7 +452,8 @@ impl<T: 'static, E: 'static> Bind<T, E> {
     /// Explicitly cancels the in-flight task and resets the state to `Idle`.
     ///
     /// If the [`ConfigFlags::ABORT`] flag is set, the background task is physically
-    /// terminated (Native only). Otherwise, the result is simply ignored.
+    /// terminated: aborted on native, or dropped at its next poll on WASM. Otherwise, the
+    /// task runs to completion and its result is simply ignored.
     pub fn abort(&mut self) {
         // Logical: Take the in-flight handle. This detaches the Bind from the task.
         if let Some(task) = self.in_flight.take() {
@@ -387,8 +471,8 @@ impl<T: 'static, E: 'static> Bind<T, E> {
 
     /// Clears any existing data and immediately starts a new async operation.
     ///
-    /// If an operation was `Pending`, its result will be discarded. The background task is not
-    /// cancelled and will run to completion.
+    /// If an operation was `Pending`, its result will be discarded. The background task runs to
+    /// completion unless the [`ConfigFlags::ABORT`] flag is set.
     ///
     /// This is a convenience method equivalent to calling `clear()` followed by `request()`.
     pub fn refresh<Fut>(&mut self, f: Fut)
@@ -677,8 +761,8 @@ impl<T: 'static, E: 'static> Bind<T, E> {
 
     /// Clears any stored data and resets the state to `Idle`.
     ///
-    /// If an operation was `Pending`, its result will be discarded. The background task is not
-    /// cancelled and will run to completion.
+    /// If an operation was `Pending`, its result will be discarded. The background task runs to
+    /// completion unless the [`ConfigFlags::ABORT`] flag is set.
     ///
     /// This method calls `poll()` internally.
     pub fn clear(&mut self) {

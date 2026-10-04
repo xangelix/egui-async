@@ -28,7 +28,7 @@ impl egui::Plugin for EguiAsyncPlugin {
     }
 
     fn on_begin_pass(&mut self, ui: &mut egui::Ui) {
-        bind::CTX.get_or_init(|| ui.ctx().clone());
+        bind::init_ctx(ui.ctx());
 
         // Prevent `retain=false` Binds from aggressively clearing their state when
         // the application is minimized, occluded, or suspended by the OS.

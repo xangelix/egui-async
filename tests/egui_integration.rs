@@ -1,9 +1,15 @@
 //! Tests for `egui` specific integration (Plugin, UI Extensions, Widgets).
-//! Uses a headless egui context.
+//! Uses a headless egui context. See `egui_wasm.rs` for the WASM counterparts.
 
-#![cfg(feature = "egui")]
+#![cfg(all(feature = "egui", not(target_family = "wasm")))]
 
-use std::sync::{Mutex, OnceLock};
+use std::{
+    sync::{
+        Arc, Mutex, OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 
 use egui_async::{Bind, EguiAsyncPlugin, UiExt, bind::CURR_FRAME};
 
@@ -19,11 +25,17 @@ where
     // Use lock to ensure global frame timers don't conflict between tests
     let _guard = test_lock().lock().expect("Global test mutex poisoned");
 
-    let ctx = egui::Context::default();
-    // Register plugin once to init globals
-    ctx.plugin_or_default::<EguiAsyncPlugin>();
+    // The plugin stores the first context it sees in a process-wide global, so all tests share
+    // one context to make sure background repaints target the context under test.
+    static CTX: OnceLock<egui::Context> = OnceLock::new();
+    let ctx = CTX.get_or_init(|| {
+        let ctx = egui::Context::default();
+        // Register plugin once to init globals
+        ctx.plugin_or_default::<EguiAsyncPlugin>();
+        ctx
+    });
 
-    f(&ctx);
+    f(ctx);
 }
 
 /// Runs a single frame, discarding its output.
@@ -198,6 +210,62 @@ fn refresh_button_interaction() {
                 // Let's ensure that code path runs.
                 ui.refresh_button(&mut b, || async { Ok(1) }, 0.1);
             });
+        });
+    });
+}
+
+#[test]
+fn result_after_first_pass_requests_repaint() {
+    with_context(|ctx| {
+        // The first pass lets the plugin register the context for background repaints.
+        run_frame(ctx, egui::RawInput::default(), |_| {});
+
+        let repainted = Arc::new(AtomicBool::new(false));
+        ctx.set_request_repaint_callback({
+            let repainted = repainted.clone();
+            move |_| repainted.store(true, Ordering::SeqCst)
+        });
+
+        // Settle any repaints egui requested for itself, so only the Bind's request is observed.
+        for _ in 0..10 {
+            if !ctx.has_requested_repaint() {
+                break;
+            }
+            run_frame(ctx, egui::RawInput::default(), |_| {});
+        }
+        assert!(
+            !ctx.has_requested_repaint(),
+            "egui kept requesting repaints"
+        );
+        repainted.store(false, Ordering::SeqCst);
+
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel::<()>();
+        let mut b: Bind<i32, ()> = Bind::new(true);
+        b.request(async move {
+            release_rx.await.map_err(|_| ())?;
+            Ok(7)
+        });
+        assert!(
+            !repainted.load(Ordering::SeqCst),
+            "repaint requested before the result was delivered"
+        );
+
+        release_tx.send(()).expect("background task is gone");
+
+        let mut delivered = false;
+        for _ in 0..200 {
+            if repainted.load(Ordering::SeqCst) {
+                delivered = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(delivered, "delivering the result did not request a repaint");
+        assert!(ctx.has_requested_repaint());
+
+        // The repaint lets the next frame pick up the result.
+        run_frame(ctx, egui::RawInput::default(), |_| {
+            assert_eq!(b.read_as_ref(), Some(Ok(&7)));
         });
     });
 }
