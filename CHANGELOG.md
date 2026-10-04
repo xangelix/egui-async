@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.7.0
+
+This release adds support for **threaded WebAssembly** builds, makes **task abortion work on WASM**, and lets you run tasks on **your own Tokio runtime**.
+
+### ⚠️ Behavior Changes
+
+- **WASM Task Abort:** `ConfigFlags::ABORT` (`Bind::set_abort(true)`) now takes effect on WASM targets. When a `Bind` aborts its in-flight task (via `abort()`, `clear()`, `refresh()`, `fill()`, or a new `request()`), the spawned future is dropped the next time it is polled, matching `AbortHandle::abort` on native. Previously, the future always ran to completion on WASM. Without the flag, or when the `Bind` itself is dropped, the future still runs to completion and its result is discarded, as before.
+  - This includes a `Bind::new(false)` that is drawn again after missing a frame: it resets itself and, with the flag set, now aborts its task on WASM too.
+  - Code after the future's current `.await` point no longer runs once aborted, so check any WASM code that sets the flag and relied on the future finishing.
+
+### Added
+
+- **Threaded WASM:** The crate now compiles and runs on `wasm32` with the `atomics` target feature, where `egui` 0.36 makes `egui::Context` neither `Send` nor `Sync`. On those builds the context is kept in a thread-local on the thread that runs `EguiAsyncPlugin`, so only that thread can request repaints; results of requests made from it are delivered there, since `wasm_bindgen_futures::spawn_local` polls tasks on the thread that spawned them.
+- **Custom Tokio Runtime (native only):** Tasks can now run on your own Tokio runtime instead of the built-in `ASYNC_RUNTIME`. Existing code is unaffected and keeps using the built-in runtime.
+  - `egui_async::set_global_runtime(handle)` sets the runtime for every `Bind`, once, at startup. The built-in runtime is then never created.
+  - `Bind::with_runtime(handle)`, `Bind::set_runtime(Option<Handle>)`, and `Bind::runtime()` set or read a runtime for a single `Bind`, which takes precedence over the global runtime and is used by every method and widget that drives that `Bind`.
+
+### Changed
+
+- **`bind::CTX`:** No longer available on threaded WASM builds (it never compiled there). It is unchanged on all other targets.
+- **Docs:** Updated `ConfigFlags::ABORT`, `Bind::set_abort`, `Bind::abort_on_clear`, `Bind::abort`, `Bind::clear`, `Bind::refresh`, and `ASYNC_RUNTIME`. The README now covers abort behavior and its limits on each target, threaded WASM support, and custom Tokio runtimes.
+
+### Tooling & Chore
+
+- **Tests:**
+  - Fixed `egui` integration tests on `egui` 0.36, which asserts in debug builds that each frame's texture changes are handled.
+  - Fixed two flaky tests: `bind_state_api` tests raced on the global frame timers, and `just_started_and_just_completed_flags` checked for completion one frame late when a task finished quickly.
+  - Added tests for repaint requests after a result is delivered, custom Tokio runtimes, and (with `wasm-bindgen-test`) WASM abort behavior and repaints on both regular and threaded WASM.
+- **Dev-Dependencies:**
+  - Upgraded `walkers` (used by the `advanced` example) to version `0.60`.
+  - Added `wasm-bindgen-test` as a WASM-only dev-dependency.
+  - The examples' dev-dependencies (`eframe`, `reqwest`, `rand`, `serde_json`, `walkers`) are now native-only, since the examples are native apps and some of these do not build for `wasm32-unknown-unknown`.
+- **Examples:** Declared `required-features = ["egui"]` for every example, so `cargo test --no-default-features` skips them instead of failing to compile.
+
 ## v0.6.0
 
 This release bumps the project dependencies to **`egui` 0.36.0**.
