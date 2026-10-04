@@ -1,7 +1,19 @@
 //! Focused tests for getters and `StateWithData` mapping.
 
+use std::sync::{Mutex, MutexGuard, OnceLock};
+
 use egui_async::bind::{CURR_FRAME, LAST_FRAME};
 use egui_async::{Bind, StateWithData};
+
+/// Serializes tests, since they share the global frame timers.
+fn test_lock() -> MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    // Be resilient to a previously-poisoned lock so one failure doesn't cascade.
+    match LOCK.get_or_init(|| Mutex::new(())).lock() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    }
+}
 
 fn set_frame_times(curr: f64, last: f64) {
     CURR_FRAME.store(curr, std::sync::atomic::Ordering::Relaxed);
@@ -10,6 +22,7 @@ fn set_frame_times(curr: f64, last: f64) {
 
 #[test]
 fn state_method_maps_ok_and_err_variants() -> Result<(), String> {
+    let _lock = test_lock();
     set_frame_times(10.0, 9.0);
 
     let mut ok: Bind<&'static str, &'static str> = Bind::new(true);
@@ -32,6 +45,7 @@ fn state_method_maps_ok_and_err_variants() -> Result<(), String> {
 #[allow(clippy::float_cmp)]
 #[test]
 fn elapsed_and_since_helpers_are_coherent() {
+    let _lock = test_lock();
     set_frame_times(100.0, 99.0);
     let mut b: Bind<i32, i32> = Bind::new(true);
 

@@ -26,6 +26,15 @@ where
     f(&ctx);
 }
 
+/// Runs a single frame, discarding its output.
+///
+/// In debug builds, egui asserts that each frame's texture changes are handled before the
+/// output is dropped, so they are cleared here as a headless backend would after uploading them.
+fn run_frame(ctx: &egui::Context, input: egui::RawInput, run_ui: impl FnMut(&mut egui::Ui)) {
+    let mut output = ctx.run_ui(input, run_ui);
+    output.textures_delta.clear();
+}
+
 #[test]
 fn plugin_updates_globals() {
     with_context(|ctx| {
@@ -35,7 +44,7 @@ fn plugin_updates_globals() {
             ..Default::default()
         };
 
-        let _ = ctx.run_ui(input, |ui| {
+        run_frame(ctx, input, |ui| {
             // Plugin hook runs in begin_frame via implicit call in `ctx.run_ui` or manual plugin usage.
             // EguiAsyncPlugin updates on `on_begin_pass`.
             // We must simulate the plugin call.
@@ -63,7 +72,7 @@ fn plugin_debug_name() {
 #[test]
 fn ui_ext_read_methods() {
     with_context(|ctx| {
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        run_frame(ctx, egui::RawInput::default(), |ui| {
             egui::CentralPanel::default().show(ui, |ui| {
                 let mut b_ok: Bind<i32, String> = Bind::new(false);
                 b_ok.fill(Ok(10));
@@ -132,7 +141,7 @@ fn ui_ext_read_methods() {
 #[test]
 fn ui_widgets_execute() {
     with_context(|ctx| {
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        run_frame(ctx, egui::RawInput::default(), |ui| {
             egui::CentralPanel::default().show(ui, |ui| {
                 // Check popup_error execution
                 // We aren't clicking, so it returns false
@@ -177,7 +186,7 @@ fn refresh_button_interaction() {
         //
         // However, we CAN verify that `refresh_button` calls `request_every_sec` internally.
 
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        run_frame(ctx, egui::RawInput::default(), |ui| {
             egui::CentralPanel::default().show(ui, |ui| {
                 let mut b: Bind<i32, ()> = Bind::default();
                 // Set time such that it IS overdue to force automatic refresh logic

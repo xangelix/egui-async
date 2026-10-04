@@ -37,14 +37,15 @@ fn bump_frame<T: 'static, E: 'static>(b: &mut Bind<T, E>) {
 fn drive_until_finished<T: 'static, E: 'static>(b: &mut Bind<T, E>, max_frames: usize) -> bool {
     use std::{thread, time::Duration};
     for _ in 0..max_frames {
-        bump_frame(b);
+        // Check before bumping: the result may already have been picked up this frame.
         if b.is_finished() {
             return true;
         }
+        bump_frame(b);
         // Give Tokio worker(s) a tiny slice to run; makes tests deterministic.
         thread::sleep(Duration::from_millis(2));
     }
-    false
+    b.is_finished()
 }
 
 /// Basic happy-path: request → Pending → Finished(Ok) → `take()` → Idle.

@@ -15,6 +15,26 @@ license = "MIT OR Apache-2.0"
 default = ["egui"]
 egui = ["dep:egui"]
 
+[[example]]
+name = "advanced"
+required-features = ["egui"]
+
+[[example]]
+name = "login"
+required-features = ["egui"]
+
+[[example]]
+name = "periodic"
+required-features = ["egui"]
+
+[[example]]
+name = "simple"
+required-features = ["egui"]
+
+[[example]]
+name = "widgets"
+required-features = ["egui"]
+
 [lints.clippy]
 todo = "deny"
 panic = "deny"
