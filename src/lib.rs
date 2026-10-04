@@ -6,6 +6,9 @@ pub mod bind;
 
 pub use bind::{Bind, State, StateWithData};
 
+#[cfg(not(target_family = "wasm"))]
+pub use bind::set_global_runtime;
+
 #[cfg(feature = "egui")]
 pub mod egui;
 

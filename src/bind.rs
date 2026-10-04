@@ -15,11 +15,54 @@ pub static CURR_FRAME: AtomicF64 = AtomicF64::new(0.0);
 pub static LAST_FRAME: AtomicF64 = AtomicF64::new(0.0);
 
 /// A lazily initialized Tokio runtime for executing async tasks on non-WASM targets.
+///
+/// This is the default runtime. It is only created once a task is spawned without another
+/// runtime chosen through [`set_global_runtime`] or [`Bind::set_runtime`].
 #[cfg(not(target_family = "wasm"))]
 pub static ASYNC_RUNTIME: std::sync::LazyLock<tokio::runtime::Runtime> =
     std::sync::LazyLock::new(|| {
         tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime.")
     });
+
+/// The runtime set by [`set_global_runtime`], if any.
+#[cfg(not(target_family = "wasm"))]
+static GLOBAL_RUNTIME: std::sync::OnceLock<tokio::runtime::Handle> = std::sync::OnceLock::new();
+
+/// Sets the Tokio runtime that every `Bind` spawns its tasks onto, in place of the built-in
+/// [`ASYNC_RUNTIME`]. A `Bind` with its own runtime ([`Bind::set_runtime`]) still uses that.
+///
+/// Call this once at startup, before the first request. Tasks already spawned stay on the
+/// runtime they were spawned on, and the built-in runtime is never created if no task needs it.
+///
+/// The runtime must stay alive and keep running tasks for as long as `Bind`s use it. A
+/// multi-thread runtime runs tasks on its worker threads, but a current-thread runtime only runs
+/// them while a thread is blocked on it. Requests spawned onto a runtime that has shut down are
+/// cancelled, and the `Bind` returns to `Idle`.
+///
+/// Native only: on WASM, tasks always run on the browser's event loop.
+///
+/// # Errors
+/// Returns the handle if a global runtime was already set.
+///
+/// # Example
+/// ```
+/// let runtime = tokio::runtime::Runtime::new().expect("failed to create runtime");
+/// egui_async::set_global_runtime(runtime.handle().clone()).expect("global runtime already set");
+///
+/// // Every `Bind` now spawns its tasks onto `runtime`, which must outlive them.
+/// ```
+#[cfg(not(target_family = "wasm"))]
+pub fn set_global_runtime(handle: tokio::runtime::Handle) -> Result<(), tokio::runtime::Handle> {
+    GLOBAL_RUNTIME.set(handle)
+}
+
+/// Returns the runtime that a `Bind` without its own runtime spawns tasks onto.
+#[cfg(not(target_family = "wasm"))]
+fn global_runtime() -> &'static tokio::runtime::Handle {
+    GLOBAL_RUNTIME
+        .get()
+        .unwrap_or_else(|| ASYNC_RUNTIME.handle())
+}
 
 /// A global holder for the `egui::Context`, used to request repaints from background tasks.
 ///
@@ -209,6 +252,10 @@ pub struct Bind<T, E> {
     /// Configuration option flags
     pub config: ConfigFlags,
 
+    /// The runtime this `Bind` spawns tasks onto, overriding the global runtime (native only).
+    #[cfg(not(target_family = "wasm"))]
+    runtime: Option<tokio::runtime::Handle>,
+
     /// A counter for how many times an async operation has been started.
     times_executed: usize,
 }
@@ -224,6 +271,11 @@ impl<T, E> Debug for Bind<T, E> {
             .field("last_start_time", &self.last_start_time)
             .field("last_complete_time", &self.last_complete_time)
             .field("times_executed", &self.times_executed);
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            out = out.field("runtime", &self.runtime);
+        }
 
         // Avoid printing the full data/recv content for cleaner debug output.
         if self.data.is_some() {
@@ -320,8 +372,50 @@ impl<T: 'static, E: 'static> Bind<T, E> {
                 ConfigFlags::empty()
             },
 
+            #[cfg(not(target_family = "wasm"))]
+            runtime: None,
+
             times_executed: 0,
         }
+    }
+
+    /// Sets the Tokio runtime this `Bind` spawns its tasks onto, for use when building a `Bind`.
+    ///
+    /// See [`Bind::set_runtime`].
+    ///
+    /// # Example
+    /// ```
+    /// # use egui_async::Bind;
+    /// let runtime = tokio::runtime::Runtime::new().expect("failed to create runtime");
+    /// let bind: Bind<String, String> = Bind::new(false).with_runtime(runtime.handle().clone());
+    /// ```
+    #[cfg(not(target_family = "wasm"))]
+    #[must_use]
+    pub fn with_runtime(mut self, handle: tokio::runtime::Handle) -> Self {
+        self.runtime = Some(handle);
+        self
+    }
+
+    /// Returns the Tokio runtime set for this `Bind`, if any.
+    ///
+    /// `None` means it uses the global runtime: the one set with [`set_global_runtime`], or the
+    /// built-in [`ASYNC_RUNTIME`].
+    #[cfg(not(target_family = "wasm"))]
+    #[must_use]
+    pub const fn runtime(&self) -> Option<&tokio::runtime::Handle> {
+        self.runtime.as_ref()
+    }
+
+    /// Sets the Tokio runtime this `Bind` spawns its tasks onto, overriding the global runtime.
+    /// `None` returns it to the global runtime.
+    ///
+    /// This takes effect from the next request; a task already in flight stays on the runtime it
+    /// was spawned on. The same requirements as for [`set_global_runtime`] apply.
+    ///
+    /// Native only: on WASM, tasks always run on the browser's event loop.
+    #[cfg(not(target_family = "wasm"))]
+    pub fn set_runtime(&mut self, handle: Option<tokio::runtime::Handle>) {
+        self.runtime = handle;
     }
 
     /// Returns whether finished data is retained across undrawn frames.
@@ -397,9 +491,12 @@ impl<T: 'static, E: 'static> Bind<T, E> {
         tracing::trace!("spawning async request #{}", self.times_executed + 1);
 
         #[cfg(not(target_family = "wasm"))]
-        let in_flight = InFlight {
-            recv: rx,
-            handle: ASYNC_RUNTIME.spawn(Self::req_inner(f, tx)).abort_handle(),
+        let in_flight = {
+            let runtime = self.runtime.as_ref().unwrap_or_else(|| global_runtime());
+            InFlight {
+                recv: rx,
+                handle: runtime.spawn(Self::req_inner(f, tx)).abort_handle(),
+            }
         };
 
         #[cfg(target_family = "wasm")]

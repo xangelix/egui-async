@@ -336,6 +336,32 @@ Without `set_abort(true)`, or if the `Bind` itself is dropped, the `Future` runs
 >
 > Aborting drops the Rust `Future`, but it does not necessarily cancel work the browser or runtime has already started. A `fetch` that was already sent may still reach the server, depending on the HTTP library. Tasks your `Future` spawned itself are not aborted either.
 
+### Custom Tokio Runtime
+
+On native targets, `egui-async` spawns tasks onto its own built-in Tokio runtime by default, so you never need to pass a runtime around. If your app already has a runtime, you can use it instead, at two levels:
+
+**Globally**, once at startup. All `Bind`s then use your runtime without any other code changes, and the built-in runtime is never created:
+
+```rust
+let runtime = tokio::runtime::Runtime::new()?;
+egui_async::set_global_runtime(runtime.handle().clone()).expect("global runtime already set");
+// Or, inside `#[tokio::main]`: set_global_runtime(tokio::runtime::Handle::current())
+```
+
+**Per `Bind`**, e.g., if you have several runtimes. This takes precedence over the global runtime, and every method and widget that drives the `Bind` uses it:
+
+```rust
+let mut bind = Bind::new(false).with_runtime(io_runtime.handle().clone());
+bind.set_runtime(None); // Back to the global runtime
+```
+
+A few things to keep in mind:
+
+- Set the global runtime **before the first request**. It can only be set once; a second call returns `Err`. Tasks already spawned stay on the runtime they started on.
+- Your runtime must **stay alive and keep running tasks** while `Bind`s use it. A multi-thread runtime does this on its own worker threads. A current-thread runtime (including `#[tokio::main(flavor = "current_thread")]`) only runs tasks while a thread is blocked on it, which the UI thread usually isn't.
+- If the runtime has shut down, new requests on it are cancelled and the `Bind` returns to `Idle`.
+- These APIs are **native only**. On WASM, tasks always run on the browser's event loop, so wrap calls in `#[cfg(not(target_family = "wasm"))]` in cross-platform code.
+
 ### 🔧 Under the Hood
 
 How does `egui-async` bridge the gap between Immediate Mode GUI (60fps loop) and Asynchronous Runtimes?
@@ -350,7 +376,7 @@ How does `egui-async` bridge the gap between Immediate Mode GUI (60fps loop) and
 
 #### Spawning
 
-On **Native** targets, tasks are spawned onto the `tokio` runtime (specifically using `tokio::spawn`).
+On **Native** targets, tasks are spawned onto a `tokio` runtime: the built-in one, or your own (see [Custom Tokio Runtime](#custom-tokio-runtime)).
 
 On **WASM** targets, tasks are spawned onto the browser's event loop using `wasm_bindgen_futures::spawn_local`. This detection happens automatically at compile time.
 
