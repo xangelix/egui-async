@@ -45,7 +45,7 @@ atomic_float = "1"
 tracing = "0.1"
 bitflags = "2"
 
-egui = { version = "0.36", optional = true }
+egui = { version = "0.36", optional = true, default-features = false }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tokio = { version = "1", default-features = false, features = [
