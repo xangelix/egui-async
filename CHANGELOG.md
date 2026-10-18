@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+This release upgrades to **`egui` 0.37**.
+
+### ⚠️ Breaking Changes
+
+- **`egui` 0.37:** The `egui` dependency is now `0.37`, so apps must upgrade `egui`/`eframe` to 0.37 alongside this crate.
+  - `egui` 0.37 no longer enables its `default_fonts` feature by default. `egui-async` never relied on it, and `eframe` still enables it (plus the new `system_fonts` feature), but apps that depend on bare `egui` and need the bundled fonts must now enable `default_fonts` themselves.
+
+### Changed
+
+- **`ErrorPopup::id_source`:** Now takes `impl Hash + Debug` instead of the deprecated `egui::AsId`. Every type that was accepted before is still accepted.
+- Replaced the APIs `egui` 0.37 deprecated: `Id::new` with `Id::unique`, and `Ui::id` with `Ui::scope_id`. Widget IDs, and so any stored widget state, are unchanged.
+
+### Tooling & Chore
+
+- **Dependencies:** Bumped `eframe` to 0.37 and `walkers` to 0.63 for the examples, and refreshed all other dependencies to their latest compatible releases.
+
 ## v0.7.0
 
 This release adds support for **threaded WebAssembly** builds, makes **task abortion work on WASM**, and lets you run tasks on **your own Tokio runtime**.

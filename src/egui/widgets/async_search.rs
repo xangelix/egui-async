@@ -105,7 +105,7 @@ impl<'a, T, E> AsyncSearch<'a, T, E> {
             popup_width,
         } = self;
 
-        let id = ui.id().with("async_search_state");
+        let id = ui.scope_id().with("async_search_state");
 
         let mut state = ui.data_mut(|d| {
             d.get_temp::<AsyncSearchState>(id)
