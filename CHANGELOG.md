@@ -7,7 +7,7 @@ This release upgrades to **`egui` 0.37**.
 ### ⚠️ Breaking Changes
 
 - **`egui` 0.37:** The `egui` dependency is now `0.37`, so apps must upgrade `egui`/`eframe` to 0.37 alongside this crate.
-  - `egui` 0.37 no longer enables its `default_fonts` feature by default. `egui-async` never relied on it, and `eframe` still enables it (plus the new `system_fonts` feature), but apps that depend on bare `egui` and need the bundled fonts must now enable `default_fonts` themselves.
+  - `egui` 0.37 no longer enables its `default_fonts` feature by default. `egui-async` never relied on it, and `eframe` still enables it (plus the new `system_fonts` feature), but apps that depend on bare `egui` and need the bundled fonts must now enable `default_fonts` themselves. `egui-async` keeps `default-features = false` on `egui` (from v0.7.1), so it never turns on `egui` features for you.
 
 ### Changed
 
