@@ -18,6 +18,12 @@ This release upgrades to **`egui` 0.37**.
 
 - **Dependencies:** Bumped `eframe` to 0.37 and `walkers` to 0.63 for the examples, and refreshed all other dependencies to their latest compatible releases.
 
+## v0.7.1
+
+### Changed
+
+- **`egui` features:** `egui-async` now depends on `egui` with `default-features = false`, so it no longer turns on `egui`'s default features (such as `default_fonts`) in your build. Apps that use `eframe`, or depend on `egui` directly with its defaults, are unaffected. An app that turned `egui`'s default features off but still relied on `egui-async` to enable them must now enable the features it needs on its own `egui` dependency. (#5)
+
 ## v0.7.0
 
 This release adds support for **threaded WebAssembly** builds, makes **task abortion work on WASM**, and lets you run tasks on **your own Tokio runtime**.
