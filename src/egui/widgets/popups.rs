@@ -13,14 +13,14 @@ impl<'a> ErrorPopup<'a> {
     pub fn new(error: &'a str) -> Self {
         Self {
             error,
-            id_source: egui::Id::new("egui_async_error_window"),
+            id_source: egui::Id::unique("egui_async_error_window"),
             retry_text: "Retry".to_string(),
         }
     }
 
     /// Overrides the default ID source. Useful if you have multiple distinct error popups.
-    pub fn id_source(mut self, id: impl egui::AsId) -> Self {
-        self.id_source = egui::Id::new(id);
+    pub fn id_source(mut self, id: impl std::hash::Hash + std::fmt::Debug) -> Self {
+        self.id_source = egui::Id::unique(id);
         self
     }
 
@@ -78,7 +78,7 @@ impl<'a> NotifyPopup<'a> {
     pub fn new(info: &'a str) -> Self {
         Self {
             info,
-            id_source: egui::Id::new("egui_async_notify_window"),
+            id_source: egui::Id::unique("egui_async_notify_window"),
             ok_text: "Ok".to_string(),
         }
     }
