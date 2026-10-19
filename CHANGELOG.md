@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.8.0
 
 This release upgrades to **`egui` 0.37**.
 
